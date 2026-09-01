@@ -144,10 +144,16 @@ export function normalizeBase44Payload(
 
   const parsed = reportSchema.safeParse(toCanonical(body, opts.mint));
   if (!parsed.success) {
+    // Naming the offending fields makes an upstream format change diagnosable
+    // from the server log without dumping the payload.
+    const where = parsed.error.issues
+      .slice(0, 5)
+      .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
+      .join("; ");
     return {
       ok: false,
       code: "malformed_response",
-      detail: `Report failed schema validation (${parsed.error.issues.length} issue(s))`,
+      detail: `Report failed schema validation (${parsed.error.issues.length}): ${where}`,
     };
   }
 

@@ -13,11 +13,19 @@ export type EvidenceLabel = (typeof EVIDENCE_LABELS)[number];
 
 const label = z.enum(EVIDENCE_LABELS).catch("UNKNOWN");
 
+/**
+ * Bounded prose.
+ *
+ * Over-length text is truncated rather than rejected: the cap exists to bound
+ * what we store and render, and discarding an otherwise valid report because
+ * one paragraph ran long would be the wrong trade. Structural problems still
+ * fail the parse.
+ */
 const text = (max: number) =>
-  z
-    .string()
-    .transform((s) => neutralizeMarkup(stripUnsafeChars(s)).trim())
-    .pipe(z.string().max(max));
+  z.string().transform((s) => {
+    const clean = neutralizeMarkup(stripUnsafeChars(s)).trim();
+    return clean.length > max ? `${clean.slice(0, max - 1).trimEnd()}…` : clean;
+  });
 
 const httpUrl = z
   .string()
@@ -56,7 +64,7 @@ export const riskSchema = z.object({
 
 export const reportSchema = z.object({
   /** The one-line verdict. */
-  answer: text(600).default(""),
+  answer: text(1200).default(""),
   token: z
     .object({
       name: text(120).nullable().optional(),

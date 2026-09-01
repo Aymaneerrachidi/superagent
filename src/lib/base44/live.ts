@@ -1,13 +1,20 @@
 /**
  * The only module that talks to Base44.
  *
- * Superagents are conversational, not request/response: you create a
- * conversation, post a message, and the assistant's reply arrives on the
- * conversation some time later. So this adapter does:
+ * Superagents are conversational, so this adapter:
  *
- *   POST {base}/conversations                       -> conversation id
- *   POST {base}/conversations/{id}/messages         -> post the question
- *   GET  {base}/conversations/{id}   (polled)       -> wait for the reply
+ *   POST {base}/conversations                 -> conversation id
+ *   POST {base}/conversations/{id}/messages   -> post the question, keep its id
+ *   GET  {base}/conversations/{id}   (polled)  -> read the reply that follows it
+ *
+ * Two properties of the live API drive the design here:
+ *
+ *  - The API returns ONE persistent conversation per key. It is shared and it
+ *    grows without bound, so the reply is located by its position after our own
+ *    message rather than by "newest assistant message" — otherwise a second
+ *    person analysing at the same time could be handed our answer, or we theirs.
+ *  - That conversation payload is already megabytes. Size limits therefore apply
+ *    to the extracted report, never to the transport envelope.
  *
  * The API key is read here and nowhere else, on the server only.
  */
@@ -15,8 +22,14 @@ import "server-only";
 import { env } from "@/lib/env";
 import { log } from "@/lib/security/logger";
 import { redact } from "@/lib/security/redact";
-import { normalizeBase44Payload, byteSize } from "@/lib/base44/normalize";
+import { normalizeBase44Payload } from "@/lib/base44/normalize";
 import type { Base44Adapter, Base44Request, Base44Result, Base44FailureCode } from "@/lib/base44/types";
+
+/**
+ * Ceiling on a conversation payload. Generous: it holds the entire history, not
+ * a report, and exists only to stop an unbounded response exhausting memory.
+ */
+const MAX_CONVERSATION_BYTES = 64 * 1024 * 1024;
 
 function fail(
   code: Base44FailureCode,
@@ -27,7 +40,7 @@ function fail(
   return { ok: false, code, detail: redact(detail), retryable, ...(httpStatus ? { httpStatus } : {}) };
 }
 
-/** Base44 authenticates with a plain `api_key` header. Overridable if that changes. */
+/** Base44 authenticates with a plain `api_key` header. */
 function authHeaders(): Record<string, string> {
   const name = env.base44AuthHeader || "api_key";
   const value = env.base44AuthScheme ? `${env.base44AuthScheme} ${env.base44ApiKey}` : env.base44ApiKey;
@@ -40,14 +53,13 @@ const base = () => env.base44BaseUrl.replace(/\/+$/, "");
  * The question put to the Superagent.
  *
  * The mint is already validated as a 32-byte Base58 key, so interpolating it
- * cannot inject instructions. Asking for JSON keeps the reply parseable; the
- * normalizer falls back gracefully when the agent answers in prose instead.
+ * cannot inject instructions.
  */
 function buildPrompt(mint: string): string {
   return [
     `Analyze the Solana token with contract address ${mint}.`,
     "",
-    "Return ONLY a JSON object inside a ```json code fence, with these keys:",
+    "Reply with ONLY a JSON object inside a ```json code fence, with these keys:",
     '- "answer": one paragraph explaining why it is moving',
     '- "token": { "name", "symbol", "pool" }',
     '- "metrics": [{ "label", "value", "direction": "up"|"down"|"flat" }]',
@@ -64,13 +76,16 @@ function buildPrompt(mint: string): string {
 }
 
 type Json = Record<string, unknown>;
+type Message = { id?: string; role?: string; content?: unknown };
+
+type CallResult = { ok: true; data: unknown } | { ok: false; status: number; text: string };
 
 async function call(
   method: "GET" | "POST",
   path: string,
   body: Json | undefined,
   signal: AbortSignal,
-): Promise<{ ok: true; data: unknown } | { ok: false; status: number; text: string }> {
+): Promise<CallResult> {
   const res = await fetch(base() + path, {
     method,
     headers: { ...authHeaders(), ...(body ? { "content-type": "application/json" } : {}) },
@@ -81,8 +96,8 @@ async function call(
 
   const text = await res.text();
   if (!res.ok) return { ok: false, status: res.status, text: text.slice(0, 300) };
-  if (byteSize(text) > env.base44MaxReportBytes * 4) {
-    return { ok: false, status: 413, text: "response too large" };
+  if (Buffer.byteLength(text, "utf8") > MAX_CONVERSATION_BYTES) {
+    return { ok: false, status: 413, text: "conversation payload too large" };
   }
   try {
     return { ok: true, data: JSON.parse(text) };
@@ -91,33 +106,51 @@ async function call(
   }
 }
 
-type Message = { id?: string; role?: string; content?: unknown };
-
 function messagesOf(conversation: unknown): Message[] {
   const c = conversation as Json | null;
-  const list = c && Array.isArray(c.messages) ? (c.messages as Message[]) : [];
-  return list;
+  return c && Array.isArray(c.messages) ? (c.messages as Message[]) : [];
 }
 
-/** The newest assistant message carrying non-empty content. */
-function latestAssistantContent(conversation: unknown, knownIds: Set<string>): string | null {
+/** Message content arrives as a string, or as parts carrying `text`. */
+function contentOf(message: Message): string {
+  const c = message.content;
+  if (typeof c === "string") return c;
+  if (Array.isArray(c)) {
+    return c
+      .map((part) =>
+        part && typeof part === "object" && typeof (part as Json).text === "string"
+          ? ((part as Json).text as string)
+          : "",
+      )
+      .join("");
+  }
+  return "";
+}
+
+/**
+ * The assistant's answer to *our* question: the last non-empty assistant message
+ * positioned after our own message. `anchorId` is the id of the message we
+ * posted; `baselineCount` is the fallback when the API did not return one.
+ */
+function replyAfterAnchor(
+  conversation: unknown,
+  anchorId: string | null,
+  baselineCount: number,
+): string | null {
   const messages = messagesOf(conversation);
-  for (let i = messages.length - 1; i >= 0; i--) {
+
+  let start = -1;
+  if (anchorId) {
+    start = messages.findIndex((m) => m.id === anchorId);
+  }
+  // Without an anchor, anything beyond the pre-existing count is new.
+  if (start < 0) start = baselineCount - 1;
+  if (start < -1) return null;
+
+  for (let i = messages.length - 1; i > start; i--) {
     const m = messages[i];
     if (!m || m.role !== "assistant") continue;
-    if (m.id && knownIds.has(m.id)) continue;
-    const content =
-      typeof m.content === "string"
-        ? m.content
-        : Array.isArray(m.content)
-          ? m.content
-              .map((part) =>
-                part && typeof part === "object" && typeof (part as Json).text === "string"
-                  ? ((part as Json).text as string)
-                  : "",
-              )
-              .join("")
-          : "";
+    const content = contentOf(m);
     if (content.trim()) return content;
   }
   return null;
@@ -140,31 +173,31 @@ export class LiveBase44Adapter implements Base44Adapter {
     const timer = setTimeout(() => controller.abort(), env.base44TimeoutMs);
 
     try {
-      // 1. Open a conversation.
+      // 1. Get the conversation. The API returns the existing one for this key.
       const created = await call("POST", "/conversations", { metadata: { job_id: req.jobId } }, controller.signal);
       if (!created.ok) {
-        log.warn("base44_http_error", { step: "create_conversation", status: created.status, body: created.text });
+        log.warn("base44_http_error", { step: "conversation", status: created.status, body: created.text });
         if (created.status === 401 || created.status === 403) {
           return fail("auth_failed", `Upstream rejected credentials (${created.status})`, false, created.status);
         }
-        return fail("upstream_error", `Create conversation returned ${created.status}`, false, created.status);
+        return fail("upstream_error", `Conversation request returned ${created.status}`, false, created.status);
       }
 
-      const conv = created.data as Json;
-      const conversationId = typeof conv?.id === "string" ? conv.id : null;
+      const conversationId = typeof (created.data as Json)?.id === "string" ? ((created.data as Json).id as string) : null;
       if (!conversationId) return fail("malformed_response", "No conversation id returned", false);
 
-      // Messages already present are not answers to our question.
-      const priorIds = new Set(
-        messagesOf(conv)
-          .map((m) => m.id)
-          .filter((id): id is string => typeof id === "string"),
-      );
+      const convPath = `/conversations/${encodeURIComponent(conversationId)}`;
 
-      // 2. Post the question.
+      // 2. Record how much history already exists. The create response omits
+      //    messages, so this needs its own read.
+      let baselineCount = 0;
+      const before = await call("GET", convPath, undefined, controller.signal);
+      if (before.ok) baselineCount = messagesOf(before.data).length;
+
+      // 3. Post the question and keep the id of our own message.
       const sent = await call(
         "POST",
-        `/conversations/${encodeURIComponent(conversationId)}${env.base44MessagePath}`,
+        `${convPath}${env.base44MessagePath}`,
         { role: "user", content: buildPrompt(req.mint) },
         controller.signal,
       );
@@ -172,26 +205,23 @@ export class LiveBase44Adapter implements Base44Adapter {
         log.warn("base44_http_error", { step: "add_message", status: sent.status, body: sent.text });
         return fail("upstream_error", `Add message returned ${sent.status}`, false, sent.status);
       }
+      const anchorId = typeof (sent.data as Json)?.id === "string" ? ((sent.data as Json).id as string) : null;
+      log.info("base44_question_sent", { jobId: req.jobId, anchored: anchorId !== null, baselineCount });
 
-      // 3. Poll until the assistant replies.
-      let delay = 2_000;
+      // 4. Poll for the reply. Intervals are unhurried because each response
+      //    carries the whole conversation.
+      let delay = 3_000;
       while (Date.now() < deadline) {
         await sleep(delay);
-        delay = Math.min(6_000, Math.round(delay * 1.3));
+        delay = Math.min(10_000, Math.round(delay * 1.25));
 
-        const polled = await call(
-          "GET",
-          `/conversations/${encodeURIComponent(conversationId)}`,
-          undefined,
-          controller.signal,
-        );
+        const polled = await call("GET", convPath, undefined, controller.signal);
         if (!polled.ok) {
-          // A transient poll failure is not fatal; the work continues upstream.
           log.warn("base44_poll_error", { status: polled.status });
           continue;
         }
 
-        const content = latestAssistantContent(polled.data, priorIds);
+        const content = replyAfterAnchor(polled.data, anchorId, baselineCount);
         if (!content) continue;
 
         const normalized = normalizeBase44Payload(content, {
@@ -199,7 +229,11 @@ export class LiveBase44Adapter implements Base44Adapter {
           maxBytes: env.base44MaxReportBytes,
         });
         if (!normalized.ok) {
-          log.warn("base44_unparseable_reply", { code: normalized.code, preview: content.slice(0, 200) });
+          log.warn("base44_unparseable_reply", {
+            code: normalized.code,
+            length: content.length,
+            preview: content.slice(0, 200),
+          });
           return fail(normalized.code, normalized.detail, false);
         }
         return { ok: true, report: normalized.report };

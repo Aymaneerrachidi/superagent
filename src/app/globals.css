@@ -1,0 +1,215 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Why Is This Pumping?
+
+   The product is a research report, not a price ticker, so it is dressed as a
+   document rather than a terminal: warm paper-white type on ink, one serif used
+   sparingly for judgement, mono for anything measured.
+
+   The palette encodes epistemics rather than direction. Amber marks what was
+   verified, slate what was reasoned, grey what stayed unknown. Green and red
+   are reserved for price movement alone, so colour never implies "good".
+--------------------------------------------------------------------------- */
+@theme {
+  --color-ink: #0a0a0d;
+  --color-ink-2: #101015;
+  --color-ink-3: #16161d;
+  --color-line: #232430;
+  --color-line-2: #33344350;
+
+  --color-paper: #ece9e2;
+  --color-paper-2: #9d9a93;
+  --color-paper-3: #67655f;
+
+  --color-fact: #e0a94a;
+  --color-inference: #7fa0cc;
+  --color-unknown: #78767f;
+  --color-alert: #d2685c;
+  --color-rise: #5fbf94;
+
+  --font-display: "Instrument Serif", ui-serif, Georgia, serif;
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html {
+  background: var(--color-ink);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--color-ink);
+  color: var(--color-paper);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* A single soft bloom behind the input. The only ambient effect on the page. */
+.bloom {
+  position: fixed;
+  top: -22rem;
+  left: 50%;
+  width: min(52rem, 130vw);
+  height: 40rem;
+  transform: translateX(-50%);
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(224, 169, 74, 0.07) 0%, transparent 65%);
+  z-index: 0;
+}
+
+.tnum {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* Small uppercase mono label used for field names and section titles. */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-paper-3);
+}
+
+:where(a, button, input, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-fact);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+::selection {
+  background: rgba(224, 169, 74, 0.25);
+}
+
+::-webkit-scrollbar {
+  width: 11px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-ink);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-line);
+  border: 3px solid var(--color-ink);
+  border-radius: 99px;
+}
+
+/* --- motion ------------------------------------------------------------- */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+@keyframes scan {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(400%);
+  }
+}
+
+.rise {
+  animation: rise 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.breathe {
+  animation: breathe 1.6s ease-in-out infinite;
+}
+.scan::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  width: 25%;
+  background: linear-gradient(90deg, transparent, var(--color-fact), transparent);
+  animation: scan 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* --- report prose ------------------------------------------------------- */
+.prose {
+  color: var(--color-paper-2);
+  font-size: 0.9375rem;
+  line-height: 1.72;
+}
+.prose > * + * {
+  margin-top: 0.9em;
+}
+.prose strong {
+  color: var(--color-paper);
+  font-weight: 550;
+}
+.prose a {
+  color: var(--color-fact);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(224, 169, 74, 0.4);
+}
+.prose a:hover {
+  text-decoration-color: var(--color-fact);
+}
+.prose code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--color-ink-3);
+  border: 1px solid var(--color-line);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+}
+.prose pre {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  background: var(--color-ink-3);
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+}
+.prose ul,
+.prose ol {
+  padding-left: 1.15rem;
+}
+.prose ul {
+  list-style: disc;
+}
+.prose ol {
+  list-style: decimal;
+}
+.prose li::marker {
+  color: var(--color-paper-3);
+}
+.prose blockquote {
+  border-left: 2px solid var(--color-line);
+  padding-left: 1rem;
+}

@@ -42,7 +42,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 | `COOLDOWN_SECONDS` | `20` | Minimum gap between analyses. |
 | `MAX_ANALYSES_PER_DAY` | `50` | Hard daily ceiling on upstream calls. |
 | `CACHE_TTL_SECONDS` | `900` | Reuse a report for the same address for this long. |
-| `BASE44_TIMEOUT_MS` | `7200000` | How long to wait for the agent (2 hours). Deep runs take minutes. |
+| `BASE44_TIMEOUT_MS` | `0` | Wait budget in ms. `0` means no limit: wait until the agent answers. |
 | `BASE44_MAX_RETRIES` | `2` | Retries for transient failures only. |
 | `BASE44_FORCE_MOCK` | `false` | Force sample data even with credentials set. |
 | `MOCK_DELAY_MS` | `2600` | Simulated research time in mock mode. |
@@ -73,8 +73,12 @@ messages like "I'm validating the exact mint..." mean it is still working, not
 that the run failed.
 
 **A full run takes about 4-5 minutes** (measured: 257s end to end), but a harder
-token can take much longer. `BASE44_TIMEOUT_MS` therefore defaults to 2 hours: a
-long wait that finishes beats a timeout that discards the work.
+token can take much longer. There is therefore **no timeout by default** — the
+adapter polls until the agent answers. Discarding research that has already been
+paid for, seconds before it lands, is the worst possible outcome.
+
+Set `BASE44_TIMEOUT_MS` to a positive number only where the host imposes its own
+ceiling (see Deploying).
 
 Every failure carries the elapsed time, e.g. `timeout:257s`. That makes it
 self-diagnosing — a timeout at 60s means the running build is stale or the budget
@@ -136,9 +140,11 @@ Two notes for a serverless deployment:
   if it becomes a problem, the fix is a shared store (Redis/KV) behind
   `src/lib/jobs/store.ts`.
 - `MAX_ANALYSES_PER_DAY` is also per-instance, so treat it as a soft ceiling.
-- A research run can take several minutes. `maxDuration = 800` on the analyze route
-  is the Vercel Fluid Compute maximum; if your agent regularly needs longer than
-  that, the run has to move to a queue or a webhook rather than an in-process poll.
+- **Serverless imposes the ceiling that the app does not.** `maxDuration = 800` on
+  the analyze route is the Vercel Fluid Compute maximum, so an unlimited wait is
+  only truly unlimited when you run the app yourself (`npm start`, a VPS, a
+  container). On Vercel a run longer than ~13 minutes is killed by the platform
+  regardless of `BASE44_TIMEOUT_MS`.
 
 ## Operations
 

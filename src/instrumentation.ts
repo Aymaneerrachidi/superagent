@@ -18,7 +18,7 @@ export async function register() {
   const { base44Configured } = await import("@/lib/env");
   console.log(
     `[config] adapter=${base44Configured() ? "live" : "mock"} ` +
-      `timeout=${Math.round(env.base44TimeoutMs / 1000)}s ` +
+      `timeout=${env.base44TimeoutMs > 0 ? Math.round(env.base44TimeoutMs / 1000) + "s" : "none"} ` +
       `cooldown=${env.cooldownSeconds}s cache=${env.cacheTtlSeconds}s`,
   );
 }

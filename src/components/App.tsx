@@ -82,14 +82,11 @@ export function App() {
         setBusy(false);
         return;
       }
-      pollRef.current = setTimeout(() => void poll(id, attempt + 1), attempt < 4 ? 800 : 1600);
+      pollRef.current = setTimeout(() => void poll(id, attempt + 1), attempt < 4 ? 900 : attempt < 30 ? 2500 : 5000);
     } catch {
-      if (attempt > 40) {
-        setError("Lost connection. Refresh to try again.");
-        setBusy(false);
-        return;
-      }
-      pollRef.current = setTimeout(() => void poll(id, attempt + 1), 2000);
+      // A network blip must not end a run the server is still working on.
+      // Back off and keep asking; the job outlives any single failed poll.
+      pollRef.current = setTimeout(() => void poll(id, attempt + 1), Math.min(15000, 2000 + attempt * 500));
     }
   }, []);
 
@@ -339,7 +336,8 @@ export function App() {
               })}
             </ol>
             <p className="mt-4 border-t border-line pt-4 text-[0.75rem] text-paper-3">
-              Deep research takes a few minutes. This keeps running if you switch tabs.
+              Deep research takes a few minutes. This keeps running if you switch tabs, and
+              there is no time limit — it waits until the agent is done.
             </p>
           </div>
         )}

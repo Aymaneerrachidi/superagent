@@ -44,7 +44,11 @@ let dayCount = 0;
 /** Drops jobs older than an hour so the map cannot grow without bound. */
 function sweep() {
   const cutoff = Date.now() - 3_600_000;
-  for (const [id, job] of jobs) if (job.startedAt < cutoff) jobs.delete(id);
+  // Finished jobs are dropped after an hour. A running one is never dropped:
+  // it has no deadline, and deleting it would strand work already paid for.
+  for (const [id, job] of jobs) {
+    if (job.status !== "running" && job.startedAt < cutoff) jobs.delete(id);
+  }
   for (const [key, entry] of cache) {
     if (entry.at < Date.now() - env.cacheTtlSeconds * 1000) cache.delete(key);
   }
@@ -155,7 +159,9 @@ function scheduleStages(job: Job): NodeJS.Timeout[] {
 async function run(job: Job): Promise<void> {
   const timers = scheduleStages(job);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), env.base44TimeoutMs);
+  // No wall clock on a running analysis. The adapter polls until the agent
+  // answers; nothing here cuts that short.
+  const timeout = env.base44TimeoutMs > 0 ? setTimeout(() => controller.abort(), env.base44TimeoutMs) : null;
 
   try {
     const result = await getBase44Adapter().analyze({
@@ -208,7 +214,7 @@ async function run(job: Job): Promise<void> {
     job.errorCode = "internal_error";
     job.error = "Something went wrong on our side.";
   } finally {
-    clearTimeout(timeout);
+    if (timeout) clearTimeout(timeout);
     for (const t of timers) clearTimeout(t);
     job.finishedAt = Date.now();
   }

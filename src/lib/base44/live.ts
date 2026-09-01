@@ -169,8 +169,12 @@ export class LiveBase44Adapter implements Base44Adapter {
     const controller = new AbortController();
     const onAbort = () => controller.abort();
     req.signal?.addEventListener("abort", onAbort, { once: true });
-    const deadline = Date.now() + env.base44TimeoutMs;
-    const timer = setTimeout(() => controller.abort(), env.base44TimeoutMs);
+
+    // A budget of 0 means no limit: keep polling until the agent answers or the
+    // caller cancels. Only a positive budget arms a deadline.
+    const budgetMs = env.base44TimeoutMs;
+    const deadline = budgetMs > 0 ? Date.now() + budgetMs : Number.POSITIVE_INFINITY;
+    const timer = budgetMs > 0 ? setTimeout(() => controller.abort(), budgetMs) : null;
 
     try {
       // 1. Get the conversation. The API returns the existing one for this key.
@@ -221,7 +225,7 @@ export class LiveBase44Adapter implements Base44Adapter {
       let sawContent = false;
       let lastPreview = "";
 
-      while (Date.now() < deadline) {
+      while (Date.now() < deadline && !controller.signal.aborted) {
         await sleep(delay);
         delay = Math.min(15_000, Math.round(delay * 1.25));
         polls += 1;
@@ -262,15 +266,15 @@ export class LiveBase44Adapter implements Base44Adapter {
           false,
         );
       }
-      log.warn("base44_timeout", { jobId: req.jobId, elapsedSeconds: secs(), polls, budgetMs: env.base44TimeoutMs });
-      return fail("timeout", `Upstream did not reply within ${Math.round(env.base44TimeoutMs / 1000)}s (waited ${secs()}s over ${polls} polls)`, false);
+      log.warn("base44_timeout", { jobId: req.jobId, elapsedSeconds: secs(), polls, budgetMs });
+      return fail("timeout", `Cancelled after ${secs()}s over ${polls} polls`, false);
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
         return fail("timeout", "Upstream did not respond in time", false);
       }
       return fail("upstream_error", `Upstream request failed: ${log.redactError(err)}`, true);
     } finally {
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       req.signal?.removeEventListener("abort", onAbort);
     }
   }

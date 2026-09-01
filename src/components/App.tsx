@@ -34,6 +34,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -52,6 +53,14 @@ export function App() {
   }, [loadAccess]);
 
   useEffect(() => () => { if (pollRef.current) clearTimeout(pollRef.current); }, []);
+
+  // A deep research run takes minutes, so the wait is shown honestly.
+  useEffect(() => {
+    if (!busy) { setElapsed(0); return; }
+    const started = Date.now();
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [busy]);
 
   const poll = useCallback(async (id: string, attempt = 0) => {
     try {
@@ -291,6 +300,12 @@ export function App() {
         {/* ---- Progress ---- */}
         {busy && job?.status === "running" && (
           <div className="rise mt-10 rounded-2xl border border-line bg-ink-2 p-5 sm:p-6">
+            <div className="mb-4 flex items-center justify-between gap-4 border-b border-line pb-3">
+              <span className="eyebrow">Researching</span>
+              <span className="tnum text-[0.6875rem] text-paper-3">
+                {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, "0")}
+              </span>
+            </div>
             <ol className="space-y-0" aria-live="polite">
               {STAGES.map((stage, i) => {
                 const done = i < stageIndex;
@@ -323,6 +338,9 @@ export function App() {
                 );
               })}
             </ol>
+            <p className="mt-4 border-t border-line pt-4 text-[0.75rem] text-paper-3">
+              Deep research takes a few minutes. This keeps running if you switch tabs.
+            </p>
           </div>
         )}
 

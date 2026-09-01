@@ -12,6 +12,12 @@ import { ACCESS_COOKIE } from "@/lib/access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+/**
+ * Vercel caps how long a function may run. The research call continues after
+ * this response is sent, so the ceiling has to cover it. 800s is the Fluid
+ * Compute maximum; locally this value is ignored.
+ */
+export const maxDuration = 800;
 
 const no = (message: string, status: number, retryAfter?: number) =>
   NextResponse.json(

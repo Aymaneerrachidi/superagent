@@ -128,32 +128,32 @@ function contentOf(message: Message): string {
 }
 
 /**
- * The assistant's answer to *our* question: the last non-empty assistant message
- * positioned after our own message. `anchorId` is the id of the message we
- * posted; `baselineCount` is the fallback when the API did not return one.
+ * Assistant messages posted after our own question, oldest first.
+ *
+ * The agent narrates its progress ("I'm validating the exact mint...") before
+ * delivering the report, so there is no single "the reply" message. The caller
+ * tries each candidate and keeps waiting until one parses.
  */
-function replyAfterAnchor(
+function repliesAfterAnchor(
   conversation: unknown,
   anchorId: string | null,
   baselineCount: number,
-): string | null {
+): string[] {
   const messages = messagesOf(conversation);
 
   let start = -1;
-  if (anchorId) {
-    start = messages.findIndex((m) => m.id === anchorId);
-  }
+  if (anchorId) start = messages.findIndex((m) => m.id === anchorId);
   // Without an anchor, anything beyond the pre-existing count is new.
   if (start < 0) start = baselineCount - 1;
-  if (start < -1) return null;
 
-  for (let i = messages.length - 1; i > start; i--) {
+  const out: string[] = [];
+  for (let i = start + 1; i < messages.length; i++) {
     const m = messages[i];
     if (!m || m.role !== "assistant") continue;
     const content = contentOf(m);
-    if (content.trim()) return content;
+    if (content.trim()) out.push(content);
   }
-  return null;
+  return out;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -208,9 +208,16 @@ export class LiveBase44Adapter implements Base44Adapter {
       const anchorId = typeof (sent.data as Json)?.id === "string" ? ((sent.data as Json).id as string) : null;
       log.info("base44_question_sent", { jobId: req.jobId, anchored: anchorId !== null, baselineCount });
 
-      // 4. Poll for the reply. Intervals are unhurried because each response
-      //    carries the whole conversation.
+      // 4. Poll until a reply parses into a report.
+      //
+      //    Intermediate progress messages are expected and are not failures:
+      //    an unparseable message means the agent is still working, so polling
+      //    continues. Only at the deadline, having seen assistant output that
+      //    never became a report, is that reported as a malformed reply.
       let delay = 3_000;
+      let sawContent = false;
+      let lastPreview = "";
+
       while (Date.now() < deadline) {
         await sleep(delay);
         delay = Math.min(10_000, Math.round(delay * 1.25));
@@ -221,24 +228,27 @@ export class LiveBase44Adapter implements Base44Adapter {
           continue;
         }
 
-        const content = replyAfterAnchor(polled.data, anchorId, baselineCount);
-        if (!content) continue;
-
-        const normalized = normalizeBase44Payload(content, {
-          mint: req.mint,
-          maxBytes: env.base44MaxReportBytes,
-        });
-        if (!normalized.ok) {
-          log.warn("base44_unparseable_reply", {
-            code: normalized.code,
-            length: content.length,
-            preview: content.slice(0, 200),
+        const candidates = repliesAfterAnchor(polled.data, anchorId, baselineCount);
+        // Newest first: the report is the last thing the agent says.
+        for (const content of [...candidates].reverse()) {
+          sawContent = true;
+          lastPreview = content.slice(0, 200);
+          const normalized = normalizeBase44Payload(content, {
+            mint: req.mint,
+            maxBytes: env.base44MaxReportBytes,
           });
-          return fail(normalized.code, normalized.detail, false);
+          if (normalized.ok) return { ok: true, report: normalized.report };
         }
-        return { ok: true, report: normalized.report };
       }
 
+      if (sawContent) {
+        log.warn("base44_never_parsed", { jobId: req.jobId, preview: lastPreview });
+        return fail(
+          "malformed_response",
+          "The agent replied but never produced a parseable report",
+          false,
+        );
+      }
       return fail("timeout", "Upstream did not reply in time", false);
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {

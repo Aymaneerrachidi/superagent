@@ -42,7 +42,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 | `COOLDOWN_SECONDS` | `20` | Minimum gap between analyses. |
 | `MAX_ANALYSES_PER_DAY` | `50` | Hard daily ceiling on upstream calls. |
 | `CACHE_TTL_SECONDS` | `900` | Reuse a report for the same address for this long. |
-| `BASE44_TIMEOUT_MS` | `300000` | Upstream timeout. |
+| `BASE44_TIMEOUT_MS` | `900000` | How long to wait for the agent. Deep runs take minutes. |
 | `BASE44_MAX_RETRIES` | `2` | Retries for transient failures only. |
 | `BASE44_FORCE_MOCK` | `false` | Force sample data even with credentials set. |
 | `MOCK_DELAY_MS` | `2600` | Simulated research time in mock mode. |
@@ -119,6 +119,9 @@ Two notes for a serverless deployment:
   if it becomes a problem, the fix is a shared store (Redis/KV) behind
   `src/lib/jobs/store.ts`.
 - `MAX_ANALYSES_PER_DAY` is also per-instance, so treat it as a soft ceiling.
+- A research run can take several minutes. `maxDuration = 800` on the analyze route
+  is the Vercel Fluid Compute maximum; if your agent regularly needs longer than
+  that, the run has to move to a queue or a webhook rather than an in-process poll.
 
 ## Operations
 

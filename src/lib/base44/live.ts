@@ -214,17 +214,21 @@ export class LiveBase44Adapter implements Base44Adapter {
       //    an unparseable message means the agent is still working, so polling
       //    continues. Only at the deadline, having seen assistant output that
       //    never became a report, is that reported as a malformed reply.
+      const startedAt = Date.now();
+      const secs = () => Math.round((Date.now() - startedAt) / 1000);
       let delay = 3_000;
+      let polls = 0;
       let sawContent = false;
       let lastPreview = "";
 
       while (Date.now() < deadline) {
         await sleep(delay);
-        delay = Math.min(10_000, Math.round(delay * 1.25));
+        delay = Math.min(15_000, Math.round(delay * 1.25));
+        polls += 1;
 
         const polled = await call("GET", convPath, undefined, controller.signal);
         if (!polled.ok) {
-          log.warn("base44_poll_error", { status: polled.status });
+          log.warn("base44_poll_error", { status: polled.status, elapsedSeconds: secs() });
           continue;
         }
 
@@ -237,19 +241,29 @@ export class LiveBase44Adapter implements Base44Adapter {
             mint: req.mint,
             maxBytes: env.base44MaxReportBytes,
           });
-          if (normalized.ok) return { ok: true, report: normalized.report };
+          if (normalized.ok) {
+            log.info("base44_report_received", { jobId: req.jobId, elapsedSeconds: secs(), polls });
+            return { ok: true, report: normalized.report };
+          }
+        }
+
+        // Every tenth poll, record that we are still waiting. Without this a
+        // long run is indistinguishable from a hung one in the log.
+        if (polls % 10 === 0) {
+          log.info("base44_waiting", { jobId: req.jobId, elapsedSeconds: secs(), polls, sawContent });
         }
       }
 
       if (sawContent) {
-        log.warn("base44_never_parsed", { jobId: req.jobId, preview: lastPreview });
+        log.warn("base44_never_parsed", { jobId: req.jobId, elapsedSeconds: secs(), preview: lastPreview });
         return fail(
           "malformed_response",
-          "The agent replied but never produced a parseable report",
+          `The agent replied but never produced a parseable report (waited ${secs()}s)`,
           false,
         );
       }
-      return fail("timeout", "Upstream did not reply in time", false);
+      log.warn("base44_timeout", { jobId: req.jobId, elapsedSeconds: secs(), polls, budgetMs: env.base44TimeoutMs });
+      return fail("timeout", `Upstream did not reply within ${Math.round(env.base44TimeoutMs / 1000)}s (waited ${secs()}s over ${polls} polls)`, false);
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
         return fail("timeout", "Upstream did not respond in time", false);

@@ -166,12 +166,21 @@ async function run(job: Job): Promise<void> {
 
     if (!result.ok) {
       // The provider's own words never reach the browser.
-      log.warn("analysis_failed", { code: result.code, detail: result.detail, status: result.httpStatus });
+      const waited = Math.round((Date.now() - job.startedAt) / 1000);
+      log.warn("analysis_failed", {
+        code: result.code,
+        detail: result.detail,
+        status: result.httpStatus,
+        waitedSeconds: waited,
+      });
       job.status = "error";
-      job.errorCode = result.httpStatus ? `${result.code}:${result.httpStatus}` : result.code;
+      // The elapsed time makes a failure self-diagnosing: one at 60s points at a
+      // stale build or a wrong budget, one at the full budget means the agent
+      // really did run that long.
+      job.errorCode = `${result.code}:${waited}s`;
       job.error =
         result.code === "timeout"
-          ? "That took too long to research. Try again in a moment."
+          ? `Research ran ${Math.floor(waited / 60)}m ${waited % 60}s without finishing. Try again.`
           : result.code === "not_configured"
             ? "The research service isn't connected yet."
             : result.code === "auth_failed"

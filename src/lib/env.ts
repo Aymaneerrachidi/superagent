@@ -59,12 +59,13 @@ export const env = {
     return p.startsWith("/") ? p : `/${p}`;
   },
   /**
-   * How long to wait for the Superagent. Deep research runs narrate several
-   * steps before delivering a report, so this is generous by default. On a
-   * serverless host, keep it under the platform's max function duration.
+   * How long to wait for the Superagent. Deep research runs take minutes and a
+   * hard token can take far longer, so this is deliberately generous: a wait
+   * that finishes is always better than a timeout that throws the work away.
+   * On a serverless host, keep it under the platform's max function duration.
    */
   get base44TimeoutMs() {
-    return int("BASE44_TIMEOUT_MS", 900_000);
+    return int("BASE44_TIMEOUT_MS", 7_200_000);
   },
   get base44MaxReportBytes() {
     return int("BASE44_MAX_REPORT_BYTES", 256_000);

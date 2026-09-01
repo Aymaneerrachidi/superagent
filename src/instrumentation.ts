@@ -13,4 +13,12 @@ export async function register() {
   if (env.accessCode.length > 0 && env.accessCode.length < 12) {
     console.warn("[config] ACCESS_CODE is short; consider a longer passphrase for a public deployment");
   }
+
+  // Printed on every boot so it is obvious which build is actually running.
+  const { base44Configured } = await import("@/lib/env");
+  console.log(
+    `[config] adapter=${base44Configured() ? "live" : "mock"} ` +
+      `timeout=${Math.round(env.base44TimeoutMs / 1000)}s ` +
+      `cooldown=${env.cooldownSeconds}s cache=${env.cacheTtlSeconds}s`,
+  );
 }

@@ -42,7 +42,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 | `COOLDOWN_SECONDS` | `20` | Minimum gap between analyses. |
 | `MAX_ANALYSES_PER_DAY` | `50` | Hard daily ceiling on upstream calls. |
 | `CACHE_TTL_SECONDS` | `900` | Reuse a report for the same address for this long. |
-| `BASE44_TIMEOUT_MS` | `900000` | How long to wait for the agent. Deep runs take minutes. |
+| `BASE44_TIMEOUT_MS` | `7200000` | How long to wait for the agent (2 hours). Deep runs take minutes. |
 | `BASE44_MAX_RETRIES` | `2` | Retries for transient failures only. |
 | `BASE44_FORCE_MOCK` | `false` | Force sample data even with credentials set. |
 | `MOCK_DELAY_MS` | `2600` | Simulated research time in mock mode. |
@@ -72,9 +72,18 @@ and then polls until a reply actually *parses* into a report — intermediate
 messages like "I'm validating the exact mint..." mean it is still working, not
 that the run failed.
 
-**A full run takes about 4-5 minutes** (measured: 257s end to end). That is why
-`BASE44_TIMEOUT_MS` defaults to 15 minutes; the old 5-minute default sat right on
-top of the real duration and produced spurious timeouts.
+**A full run takes about 4-5 minutes** (measured: 257s end to end), but a harder
+token can take much longer. `BASE44_TIMEOUT_MS` therefore defaults to 2 hours: a
+long wait that finishes beats a timeout that discards the work.
+
+Every failure carries the elapsed time, e.g. `timeout:257s`. That makes it
+self-diagnosing — a timeout at 60s means the running build is stale or the budget
+is wrong, one near the full budget means the agent genuinely ran that long. The
+server also prints its effective settings on boot:
+
+```
+[config] adapter=live timeout=7200s cooldown=20s cache=900s
+```
 
 The reply It is normalized in
 [`src/lib/base44/normalize.ts`](src/lib/base44/normalize.ts), which unwraps fenced

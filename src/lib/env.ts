@@ -50,6 +50,14 @@ export const env = {
   get base44AuthScheme() {
     return str("BASE44_AUTH_SCHEME");
   },
+  /**
+   * Path appended to /conversations/{id} to post a message. Configurable
+   * because the exact segment is not in Base44's public docs.
+   */
+  get base44MessagePath() {
+    const p = str("BASE44_MESSAGE_PATH", "/messages");
+    return p.startsWith("/") ? p : `/${p}`;
+  },
   get base44TimeoutMs() {
     return int("BASE44_TIMEOUT_MS", 300_000);
   },

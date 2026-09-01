@@ -19,7 +19,7 @@ sample data, so the whole app works immediately.
 
 ## Environment
 
-Six variables, all optional:
+Five variables, all optional:
 
 | Variable | Default | What it does |
 | --- | --- | --- |
@@ -27,7 +27,6 @@ Six variables, all optional:
 | `SESSION_SECRET` | *(blank)* | Signs the access cookie. Required only when `ACCESS_CODE` is set. |
 | `BASE44_SUPERAGENT_BASE_URL` | *(blank)* | Your Superagent endpoint. |
 | `BASE44_SUPERAGENT_API_KEY` | *(blank)* | Your API key. Server-side only. |
-| `BASE44_SUPERAGENT_ID` | *(blank)* | Sent as `agent_id` if your deployment needs it. |
 | `ANALYSIS_ENABLED` | `true` | Set `false` to stop all analyses instantly. |
 
 Generate a session secret:
@@ -53,32 +52,34 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 Set `BASE44_SUPERAGENT_BASE_URL` and `BASE44_SUPERAGENT_API_KEY`, restart, and the
 "Sample data" badge disappears.
 
-**The request format in [`src/lib/base44/live.ts`](src/lib/base44/live.ts) is a
-placeholder.** It was written without access to the Base44 API documentation, so it
-posts this to `{BASE_URL}/`:
+Superagents are **conversational**, not request/response. The adapter in
+[`src/lib/base44/live.ts`](src/lib/base44/live.ts) implements the verified flow:
 
-```json
-{
-  "agent_id": "…",
-  "input": { "chain": "solana", "token_mint": "…" },
-  "metadata": { "job_id": "…" },
-  "response_format": "json"
-}
+```
+POST {BASE_URL}/conversations                 -> { "id": "..." }
+POST {BASE_URL}/conversations/{id}/messages   -> { "role": "user", "content": "..." }
+GET  {BASE_URL}/conversations/{id}            -> { "messages": [...] }   (polled)
 ```
 
-with the key in an `api_key` header. If your Superagent expects something else,
-edit `attempt()` in that one file — it is the only place the app touches Base44.
-Two knobs cover the common variations without a code change:
+- `BASE_URL` is the "Base URL" from your Superagent's **Developer** panel, e.g.
+  `https://<your-app>.base44.com/api/agents/<agentId>`. Use it exactly as shown —
+  do not append a path.
+- Auth is a plain `api_key: <key>` header. `Authorization: Bearer` returns 401.
+- `role` must be the literal string `"user"`.
+
+The adapter posts a message asking for a JSON report in a fenced block, then polls
+until a new assistant message appears. The reply is normalized in
+[`src/lib/base44/normalize.ts`](src/lib/base44/normalize.ts), which unwraps fenced
+JSON and `{data:…}` / `{result:…}` / `{output:…}` envelopes, and accepts both
+`camelCase` and `snake_case` keys. If the agent answers in prose instead of JSON,
+the run fails with `malformed_response` rather than showing an unverified report.
+
+Two escape hatches if your deployment differs:
 
 ```bash
-BASE44_AUTH_HEADER=authorization
-BASE44_AUTH_SCHEME=Bearer        # produces: Authorization: Bearer <key>
+BASE44_MESSAGE_PATH=/messages          # segment after /conversations/{id}
+BASE44_AUTH_HEADER=authorization       # with BASE44_AUTH_SCHEME=Bearer
 ```
-
-The response is normalized in
-[`src/lib/base44/normalize.ts`](src/lib/base44/normalize.ts), which already accepts
-both `camelCase` and `snake_case` keys and unwraps `{data:…}` / `{result:…}` /
-`{output:…}` envelopes and fenced JSON.
 
 ## How it works
 

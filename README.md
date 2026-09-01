@@ -67,8 +67,16 @@ GET  {BASE_URL}/conversations/{id}            -> { "messages": [...] }   (polled
 - Auth is a plain `api_key: <key>` header. `Authorization: Bearer` returns 401.
 - `role` must be the literal string `"user"`.
 
-The adapter posts a message asking for a JSON report in a fenced block, then polls
-until a new assistant message appears. The reply is normalized in
+The agent narrates its progress before answering, so the adapter posts the question
+and then polls until a reply actually *parses* into a report — intermediate
+messages like "I'm validating the exact mint..." mean it is still working, not
+that the run failed.
+
+**A full run takes about 4-5 minutes** (measured: 257s end to end). That is why
+`BASE44_TIMEOUT_MS` defaults to 15 minutes; the old 5-minute default sat right on
+top of the real duration and produced spurious timeouts.
+
+The reply It is normalized in
 [`src/lib/base44/normalize.ts`](src/lib/base44/normalize.ts), which unwraps fenced
 JSON and `{data:…}` / `{result:…}` / `{output:…}` envelopes, and accepts both
 `camelCase` and `snake_case` keys. If the agent answers in prose instead of JSON,

@@ -285,7 +285,8 @@ export class LiveBase44Adapter implements Base44Adapter {
               polls: timings.polls,
               progressEvents: progress.length,
             });
-            return { ok: true, report: normalized.report, partial: false, timings };
+            // The agent reports its own completeness.
+            return { ok: true, report: normalized.report, partial: normalized.partial, timings };
           }
 
           // Not a report: the agent is narrating its work.

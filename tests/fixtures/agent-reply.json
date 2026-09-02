@@ -1,220 +1,304 @@
-```json
 {
-  "answer": "FACT: OTC is up about 23% over 1 hour and 158% over 24 hours on its primary PumpSwap pool, with approximately $8.0M in 24-hour volume and $275K in liquidity [s2][s3]. INFERENCE: The strongest timed catalyst is OTC Desks announcing WYFI paired pre-reward tokens at 19:42 UTC, three minutes before a 15-minute candle gained 30.8% on roughly $214.8K volume [s4][s8]. INFERENCE: KuCoin Alpha’s earlier OTC listing likely improved accessibility and visibility, but its timing is too early to explain the 19:45 UTC acceleration by itself [s9][s10]. FACT: The project’s subsequent $45M AUM claim and launcher-fee buyback announcement occurred after that acceleration and therefore qualify as later amplification, not the initial trigger [s11][s12].",
+  "status": "completed",
   "token": {
     "name": "OTC",
     "symbol": "OTC",
-    "pool": "DA4pM4xSDY4M9V4CgAKKBVH1pw1yscTQQa5nEkGHuKpt"
+    "mint": "MukLDtJ8Cx9DxLbeyLRSWPSposTMWuwHANbuaudpump",
+    "primary_pool": "DA4pM4xSDY4M9V4CgAKKBVH1pw1yscTQQa5nEkGHuKpt"
   },
-  "metrics": [
-    {
-      "label": "1-hour price change — FACT [s2]",
-      "value": "+23.45%",
-      "direction": "up"
-    },
-    {
-      "label": "24-hour price change — FACT [s2][s3]",
-      "value": "+157% to +159%",
-      "direction": "up"
-    },
-    {
-      "label": "24-hour volume — FACT [s2][s3]",
-      "value": "$7.96M–$7.99M",
-      "direction": "up"
-    },
-    {
-      "label": "Primary-pool liquidity — FACT [s2][s3]",
-      "value": "$274.7K–$275.8K",
-      "direction": "flat"
-    },
-    {
-      "label": "Market capitalization — FACT [s2][s3]",
-      "value": "approximately $3.9M",
-      "direction": "up"
-    },
-    {
-      "label": "Drawdown from 24-hour high — FACT [s3][s4]",
-      "value": "approximately -48% from $0.01045",
-      "direction": "down"
+  "snapshot_at": "2026-09-02T00:27:16Z",
+  "movement": {
+    "classification": "24H_PUMP_WITH_SHORT_TERM_PULLBACK",
+    "price_usd": 0.004554,
+    "market_cap_usd": 3324030,
+    "liquidity_usd": 255084.49,
+    "volume_1h_usd": 235488.06,
+    "volume_6h_usd": 1612892.49,
+    "volume_24h_usd": 8294809.78,
+    "price_change_5m_pct": -0.21,
+    "price_change_1h_pct": -11.62,
+    "price_change_6h_pct": 39.32,
+    "price_change_24h_pct": 92.86,
+    "recorded_24h_high_usd": 0.01044587,
+    "drawdown_from_24h_high_pct": -56.68,
+    "main_inflection": {
+      "time_utc": "2026-09-01T19:45:00Z",
+      "change_pct": 30.79,
+      "candle_volume_usd": 214841.77,
+      "label": "FACT",
+      "source_ids": [
+        "s3"
+      ]
     }
-  ],
-  "marketSummary": "FACT: At the 2026-09-01 22:35 UTC snapshot, OTC traded near $0.00534 on the primary PumpSwap pool, with approximately $3.9M market capitalization, $275K liquidity and $8.0M 24-hour volume [s2][s3]. FA...",
-  "catalysts": [
+  },
+  "summary": "FACT: OTC remained up 92.86% over 24 hours and 39.32% over six hours, but was down 11.62% over one hour and approximately 56.7% below its recorded daily high [s2][s3]. INFERENCE: The pump is being sustained by a rapid product-shipping narrative around the OTC Desks tokenized-asset launcher. The strongest timed candidate for the main 19:45 UTC acceleration was the 19:42 UTC WYFI paired-token launch; buyback activation and Hyperliquid support later amplified attention but did not prevent a short-term pullback [s7][s9][s10][s11].",
+  "drivers": [
     {
-      "title": "WYFI paired-token launch overlapped the acceleration",
-      "summary": "The metadata-linked OTC account announced that WYFI paired pre-reward tokens were live at 19:42 UTC. The primary pool then advanced 30.8% during the 19:45 UTC c...",
-      "confidence": 0.82,
+      "rank": 1,
+      "title": "WYFI paired-token launch aligned with the main acceleration",
+      "classification": "POSSIBLE INITIAL TRIGGER",
       "label": "INFERENCE",
-      "sourceIds": [
-        "s4",
-        "s8"
+      "confidence": 0.84,
+      "score": 78,
+      "evidence": "The metadata-linked OTC account announced WYFI paired pre-reward tokens at 19:42 UTC. Three minutes later, the primary pool entered a 15-minute candle that gained 30.79% on $214,84...",
+      "source_ids": [
+        "s3",
+        "s7"
       ]
     },
     {
-      "title": "KuCoin Alpha listing increased access and visibility",
-      "summary": "KuCoin announced OTC/USDT trading for the exact mint on September 1. This was a verified listing and likely supported broader attention, but it occurred many ho...",
-      "confidence": 0.68,
+      "rank": 2,
+      "title": "Buyback mechanics strengthened the token-value narrative",
+      "classification": "CONTEMPORANEOUS AMPLIFICATION",
       "label": "INFERENCE",
-      "sourceIds": [
+      "confidence": 0.76,
+      "score": 71,
+      "evidence": "The project announced at 22:30 UTC that launcher trading-tax revenue would partly fund OTC buybacks and stated at 23:29 UTC that buybacks were live. These announcements followed th...",
+      "source_ids": [
         "s9",
         "s10"
       ]
     },
     {
-      "title": "AUM and buyback announcements amplified the move later",
-      "summary": "The project claimed more than $45M AUM across launched tokens at 21:25 UTC and announced that part of launcher trading-tax revenue would fund OTC buybacks at 22...",
-      "confidence": 0.97,
+      "rank": 3,
+      "title": "Hyperliquid support extended the rapid-shipping narrative",
+      "classification": "LATER AMPLIFICATION",
+      "label": "INFERENCE",
+      "confidence": 0.69,
+      "score": 65,
+      "evidence": "At 23:50 UTC, the project announced that users could launch tokens rewarding holders in HYPE. The announcement overlapped a short rebound, but price remained below its earlier high...",
+      "source_ids": [
+        "s3",
+        "s11"
+      ]
+    },
+    {
+      "rank": 4,
+      "title": "KuCoin Alpha expanded access and visibility",
+      "classification": "UNDERLYING NARRATIVE",
+      "label": "INFERENCE",
+      "confidence": 0.63,
+      "score": 61,
+      "evidence": "KuCoin listed the exact mint with an OTC/USDT pair. The listing preceded the main acceleration by many hours, making it supportive context rather than a tightly timed trigger.",
+      "source_ids": [
+        "s8"
+      ]
+    }
+  ],
+  "narrative": {
+    "categories": [
+      "PRODUCT/ECOSYSTEM TOKEN"
+    ],
+    "origin": "FACT: OTC launched as the token for OTC Desks, an on-chain desk and launcher ecosystem marketed around tokenized stocks, pre-IPO exposure, yield and holder rewards [s4][s5][s6].",
+    "lore": "INFERENCE: The central lore is that traders can own on-chain desks, launch tokens tied to stocks or other assets, and participate in an ecosystem where launcher fees support assets, reward pots or OTC...",
+    "token_connection": "FACT: Pump.fun metadata, the website and the exact launch post connect the supplied mint to OTC Desks [s4][s5][s6].",
+    "maturity": "ACCELERATING",
+    "maturity_label": "INFERENCE",
+    "competing_narratives": "UNKNOWN: No stronger competing origin narrative was verified. The project's tokenized-asset backing, AUM and buyback-execution claims were not independently audited."
+  },
+  "social": [
+    {
+      "account": "@OTCDesks",
+      "relationship": "metadata-linked and website-linked",
+      "published_at": "2026-09-01T19:42:00Z",
+      "event": "WYFI paired pre-reward token launch",
+      "classification": "POSSIBLE INITIAL TRIGGER",
       "label": "FACT",
-      "sourceIds": [
-        "s4",
-        "s11",
+      "url": "https://x.com/OTCDesks/status/2094873639069868426"
+    },
+    {
+      "account": "@OTCDesks",
+      "relationship": "metadata-linked and website-linked",
+      "published_at": "2026-09-01T22:30:00Z",
+      "event": "Launcher-fee allocation to OTC buybacks",
+      "classification": "CONTEMPORANEOUS AMPLIFICATION",
+      "label": "FACT",
+      "url": "https://x.com/OTCDesks/status/2094915787152576914"
+    },
+    {
+      "account": "@OTCDesks",
+      "relationship": "metadata-linked and website-linked",
+      "published_at": "2026-09-01T23:29:00Z",
+      "event": "Buybacks announced as live",
+      "classification": "LATER AMPLIFICATION",
+      "label": "FACT",
+      "url": "https://x.com/OTCDesks/status/2094930657730339091"
+    }
+  ],
+  "wallet_activity": [
+    {
+      "finding": "Rugcheck reported the largest non-market holder at 6.8853% and the ten largest non-market holders at approximately 19.91% combined.",
+      "retrieved_at": "2026-09-02T00:27:16Z",
+      "exclusions": [
+        "recognized liquidity-pool token accounts",
+        "recognized market accounts"
+      ],
+      "label": "FACT",
+      "source_ids": [
         "s12"
       ]
     },
     {
-      "title": "Tokenized-assets and launchpad narrative",
-      "summary": "The project presents OTC as an on-chain desk and launchpad ecosystem involving tokenized stocks, pre-IPO exposure, yield and creator-fee mechanics. This differe...",
-      "confidence": 0.7,
-      "label": "INFERENCE",
-      "sourceIds": [
-        "s5",
-        "s6",
-        "s7"
-      ]
+      "finding": "No important wallet entry, exit or transfer was used as catalyst evidence because no exact transaction-level explorer link was verified.",
+      "label": "UNKNOWN",
+      "source_ids": []
     }
   ],
-  "narrative": "FACT: Immutable metadata, Pump.fun and DexScreener identify the exact token as OTC and link it to otcdesks.cash and @OTCDesks [s1][s2][s5][s6]. FACT: The project launched the exact CA publicly on Augu...",
+  "creator_activity": {
+    "status": "PARTIAL",
+    "pump_fun_creator": "8H1LBqJmS3cuyEYYNC7G7rH2uUHbd3c54oL6yMSoBYtF",
+    "rugcheck_creator": "6SJHhnhrmRUGn7tLPW8n23XmoHASRzvo9xeYk7UQYL6L",
+    "rugcheck_creator_balance": 0,
+    "label": "UNKNOWN",
+    "assessment": "Creator attribution differs between Pump.fun and Rugcheck, potentially because the providers use different creation-role definitions. No exact creator sale or transfer transaction was verified, so creator trading behavior cannot be established.",
+    "source_ids": [
+      "s4",
+      "s12"
+    ]
+  },
   "risks": [
     {
-      "title": "Extreme volatility and deep intraday retracement",
+      "title": "Extreme volatility",
       "severity": "high",
-      "detail": "OTC rose approximately 158% over 24 hours but traded about 48% below its $0.01045 intraday high at the snapshot. The 19:45 UTC candle surged 30.8% before the ne...",
       "label": "FACT",
-      "sourceIds": [
-        "s3",
-        "s4"
-      ]
-    },
-    {
-      "title": "Bundled-buy exposure",
-      "severity": "high",
-      "detail": "GeckoTerminal reports that 26.97% of tokens were purchased through bundled buys. This is a provider classification and raises concentration or coordinated-launc...",
-      "label": "INFERENCE",
-      "sourceIds": [
-        "s3"
-      ]
-    },
-    {
-      "title": "Creator attribution conflict",
-      "severity": "medium",
-      "detail": "Pump.fun and Rugcheck expose different creator addresses. The discrepancy may reflect different definitions or transaction roles, but ownership and creator beha...",
-      "label": "UNKNOWN",
-      "sourceIds": [
-        "s5",
-        "s13"
-      ]
-    },
-    {
-      "title": "Liquidity remains modest relative to turnover",
-      "severity": "medium",
-      "detail": "The primary pool holds approximately $275K liquidity against roughly $8M in daily volume and a $3.9M market capitalization. Rapid entries or exits can therefore...",
-      "label": "FACT",
-      "sourceIds": [
+      "detail": "OTC remained up 92.86% over 24 hours but was down 11.62% over one hour and approximately 56.7% below its recorded daily high.",
+      "source_ids": [
         "s2",
         "s3"
       ]
     },
     {
-      "title": "Contract authority controls are disabled",
-      "severity": "low",
-      "detail": "The mint and freeze authorities are null, and Rugcheck returned no explicit token risks at retrieval. This reduces mint/freeze control risk but does not validat...",
+      "title": "Liquidity is modest relative to turnover",
+      "severity": "high",
       "label": "FACT",
-      "sourceIds": [
+      "detail": "The primary pool held approximately $255,084 liquidity against approximately $8.29 million in 24-hour volume, allowing relatively small flow changes to produce ...",
+      "source_ids": [
+        "s2"
+      ]
+    },
+    {
+      "title": "Creator attribution conflict",
+      "severity": "medium",
+      "label": "UNKNOWN",
+      "detail": "Pump.fun and Rugcheck identify different creator addresses. No transaction-level reconstruction was completed to resolve the discrepancy.",
+      "source_ids": [
+        "s4",
+        "s12"
+      ]
+    },
+    {
+      "title": "Product and backing claims remain unaudited",
+      "severity": "medium",
+      "label": "UNKNOWN",
+      "detail": "The project describes tokenized stocks, pre-IPO exposure, yield, AUM and buyback mechanics, but custody, backing, valuation and completed buyback execution were...",
+      "source_ids": [
+        "s5",
+        "s9",
+        "s10"
+      ]
+    },
+    {
+      "title": "Mint and freeze controls",
+      "severity": "low",
+      "label": "FACT",
+      "detail": "The mint and freeze authorities are null, and Rugcheck returned no explicit token risks at retrieval.",
+      "source_ids": [
         "s1",
-        "s13"
+        "s12"
       ]
     }
   ],
-  "bottomLine": "INFERENCE: OTC is moving on a combination of a strong tokenized-assets/launchpad narrative, expanding exchange accessibility and rapid product announcements, with the 19:42 UTC WYFI launch the best-ti...",
+  "bottom_line": "READY. INFERENCE: OTC is moving because traders are rewarding a fast-shipping tokenized-assets launcher narrative. The 19:42 UTC WYFI launch is the strongest candidate for the main 19:45 acceleration, while buyback activation and Hyperliquid support provided later amplification [s3][s7][s9][s10][s11]. FACT: Momentum remained positive over six and 24 hours but had weakened over one hour, with price...",
   "sources": [
     {
       "id": "s1",
-      "title": "Solana Explorer — OTC Token-2022 mint",
+      "title": "OTC Token-2022 mint",
       "url": "https://explorer.solana.com/address/MukLDtJ8Cx9DxLbeyLRSWPSposTMWuwHANbuaudpump?cluster=mainnet",
-      "publisher": "Solana Explorer"
+      "publisher": "Solana Explorer",
+      "retrieved_at": "2026-09-02T00:27:16Z"
     },
     {
       "id": "s2",
-      "title": "OTC/SOL primary PumpSwap pool — retrieved 2026-09-01 22:35 UTC",
+      "title": "OTC/SOL primary PumpSwap market",
       "url": "https://dexscreener.com/solana/DA4pM4xSDY4M9V4CgAKKBVH1pw1yscTQQa5nEkGHuKpt",
-      "publisher": "DexScreener"
+      "publisher": "DexScreener",
+      "retrieved_at": "2026-09-02T00:27:16Z"
     },
     {
       "id": "s3",
-      "title": "OTC/SOL PumpSwap market and security page — retrieved 2026-09-01 22:36 UTC",
-      "url": "https://www.geckoterminal.com/solana/pools/DA4pM4xSDY4M9V4CgAKKBVH1pw1yscTQQa5nEkGHuKpt",
-      "publisher": "GeckoTerminal"
+      "title": "OTC/SOL 15-minute OHLCV",
+      "url": "https://api.geckoterminal.com/api/v2/networks/solana/pools/DA4pM4xSDY4M9V4CgAKKBVH1pw1yscTQQa5nEkGHuKpt/ohlcv/minute?aggregate=15&limit=400&currency=usd&token=base",
+      "publisher": "GeckoTerminal API",
+      "retrieved_at": "2026-09-02T00:27:16Z"
     },
     {
       "id": "s4",
-      "title": "OTC/SOL 15-minute OHLCV — retrieved 2026-09-01 22:36 UTC",
-      "url": "https://api.geckoterminal.com/api/v2/networks/solana/pools/DA4pM4xSDY4M9V4CgAKKBVH1pw1yscTQQa5nEkGHuKpt/ohlcv/minute?aggregate=15&limit=400&currency=usd&token=base",
-      "publisher": "GeckoTerminal API"
+      "title": "OTC token launch metadata",
+      "url": "https://pump.fun/coin/MukLDtJ8Cx9DxLbeyLRSWPSposTMWuwHANbuaudpump",
+      "publisher": "Pump.fun",
+      "retrieved_at": "2026-09-02T00:27:16Z"
     },
     {
       "id": "s5",
-      "title": "OTC token page and launch metadata",
-      "url": "https://pump.fun/coin/MukLDtJ8Cx9DxLbeyLRSWPSposTMWuwHANbuaudpump",
-      "publisher": "Pump.fun"
+      "title": "OTC Desks website",
+      "url": "https://otcdesks.cash/",
+      "publisher": "OTC Desks",
+      "retrieved_at": "2026-09-02T00:27:16Z"
     },
     {
       "id": "s6",
-      "title": "OTC Desks project website",
-      "url": "https://otcdesks.cash/",
-      "publisher": "OTC Desks"
+      "title": "Exact OTC token-generation and CA post",
+      "url": "https://x.com/OTCDesks/status/2093331167659331983",
+      "publisher": "OTC Desks on X",
+      "retrieved_at": "2026-09-02T00:27:16Z"
     },
     {
       "id": "s7",
-      "title": "Exact OTC TGE and CA launch post — 2026-08-28 13:33 UTC",
-      "url": "https://x.com/OTCDesks/status/2093331167659331983",
-      "publisher": "OTC Desks on X"
+      "title": "Exact WYFI paired-token launch post",
+      "url": "https://x.com/OTCDesks/status/2094873639069868426",
+      "publisher": "OTC Desks on X",
+      "retrieved_at": "2026-09-02T00:27:16Z"
     },
     {
       "id": "s8",
-      "title": "Exact WYFI paired pre-reward token announcement — 2026-09-01 19:42 UTC",
-      "url": "https://x.com/OTCDesks/status/2094873639069868426",
-      "publisher": "OTC Desks on X"
+      "title": "Exact KuCoin Alpha OTC listing post",
+      "url": "https://x.com/kucoincom/status/2094720608626147417",
+      "publisher": "KuCoin on X",
+      "retrieved_at": "2026-09-02T00:27:16Z"
     },
     {
       "id": "s9",
-      "title": "Exact KuCoin Alpha OTC listing post — 2026-09-01",
-      "url": "https://x.com/kucoincom/status/2094720608626147417",
-      "publisher": "KuCoin on X"
+      "title": "Exact launcher-fee OTC buyback announcement",
+      "url": "https://x.com/OTCDesks/status/2094915787152576914",
+      "publisher": "OTC Desks on X",
+      "retrieved_at": "2026-09-02T00:27:16Z"
     },
     {
       "id": "s10",
-      "title": "KuCoin Alpha New Listed Token — OTC",
-      "url": "https://www.kucoin.com/announcement/en-kucoin-alpha-new-listed-token-otc-otc",
-      "publisher": "KuCoin"
+      "title": "Exact buybacks-live announcement",
+      "url": "https://x.com/OTCDesks/status/2094930657730339091",
+      "publisher": "OTC Desks on X",
+      "retrieved_at": "2026-09-02T00:27:16Z"
     },
     {
       "id": "s11",
-      "title": "Exact project $45M AUM claim — 2026-09-01 21:25 UTC",
-      "url": "https://x.com/OTCDesks/status/2094899398182392194",
-      "publisher": "OTC Desks on X"
+      "title": "Exact Hyperliquid launcher-support announcement",
+      "url": "https://x.com/OTCDesks/status/2094935956147110022",
+      "publisher": "OTC Desks on X",
+      "retrieved_at": "2026-09-02T00:27:16Z"
     },
     {
       "id": "s12",
-      "title": "Exact launcher-fee OTC buyback announcement — 2026-09-01 22:30 UTC",
-      "url": "https://x.com/OTCDesks/status/2094915787152576914",
-      "publisher": "OTC Desks on X"
-    },
-    {
-      "id": "s13",
-      "title": "OTC token risk, holder and market report — retrieved 2026-09-01 22:36:37 UTC",
+      "title": "OTC holder and risk report",
       "url": "https://api.rugcheck.xyz/v1/tokens/MukLDtJ8Cx9DxLbeyLRSWPSposTMWuwHANbuaudpump/report",
-      "publisher": "Rugcheck"
+      "publisher": "Rugcheck",
+      "retrieved_at": "2026-09-02T00:27:16Z"
     }
-  ]
+  ],
+  "limitations": [
+    "Public X coverage is incomplete; private, deleted or unindexed posts may be missing.",
+    "The project's AUM, tokenized-asset backing and completed-buyback claims were not independently audited.",
+    "No exact transaction-level creator sale, smart-wallet entry or coordinated-wallet event was verified."
+  ],
+  "partial": false
 }
-```

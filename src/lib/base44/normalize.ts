@@ -1,14 +1,18 @@
 /**
- * Normalizes whatever shape the Superagent returns into the report contract.
+ * Normalizes the Superagent's reply into the report contract.
  *
- * Size is checked before parsing, then every field is coerced. Anything
- * unrecognized is dropped rather than passed through, and nothing here is ever
- * treated as an instruction.
+ * The agent has its own richer vocabulary — `drivers` rather than catalysts,
+ * `movement` rather than market, `narrative` as a structured object — so the
+ * mapping is written against what it actually emits, with generic fallbacks for
+ * anything that arrives in a plainer shape.
+ *
+ * The payload is untrusted: size is checked before parsing, every field is
+ * coerced, and anything unrecognized is dropped rather than passed through.
  */
 import { reportSchema, computeMissingSections, type Report } from "@/lib/report/schema";
 
 export type NormalizeResult =
-  | { ok: true; report: Report }
+  | { ok: true; report: Report; partial: boolean }
   | { ok: false; code: "oversized_response" | "malformed_response"; detail: string };
 
 export function byteSize(value: unknown): number {
@@ -20,15 +24,52 @@ export function byteSize(value: unknown): number {
   }
 }
 
-function pick(obj: Record<string, unknown>, ...keys: string[]): unknown {
+type Json = Record<string, unknown>;
+
+function obj(v: unknown): Json {
+  return v && typeof v === "object" && !Array.isArray(v) ? (v as Json) : {};
+}
+
+function arr(v: unknown): unknown[] {
+  return Array.isArray(v) ? v : [];
+}
+
+function str(v: unknown): string {
+  return typeof v === "string" ? v : "";
+}
+
+function pick(o: Json, ...keys: string[]): unknown {
   for (const k of keys) {
-    const v = obj[k];
+    const v = o[k];
     if (v !== undefined && v !== null && v !== "") return v;
   }
   return undefined;
 }
 
-/** Unwraps the common envelope shapes down to the report object itself. */
+// --- formatting for the market strip ---------------------------------------
+
+function usd(n: unknown): string | null {
+  if (typeof n !== "number" || !Number.isFinite(n)) return null;
+  const a = Math.abs(n);
+  if (a >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(2)}B`;
+  if (a >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
+  if (a >= 1_000) return `$${Math.round(n / 1_000)}k`;
+  // Sub-dollar prices need their significant digits, not two decimals.
+  if (a < 1) return `$${n.toPrecision(3)}`;
+  return `$${n.toFixed(2)}`;
+}
+
+function pct(n: unknown): string | null {
+  if (typeof n !== "number" || !Number.isFinite(n)) return null;
+  return `${n > 0 ? "+" : ""}${n.toFixed(n >= 100 || n <= -100 ? 0 : 2)}%`;
+}
+
+function dir(n: unknown): "up" | "down" | "flat" {
+  if (typeof n !== "number" || !Number.isFinite(n)) return "flat";
+  return n > 0 ? "up" : n < 0 ? "down" : "flat";
+}
+
+/** Unwraps envelopes down to the report object itself. */
 function unwrap(raw: unknown, depth = 0): unknown {
   if (depth > 5) return raw;
 
@@ -47,85 +88,158 @@ function unwrap(raw: unknown, depth = 0): unknown {
   }
 
   if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-    const obj = raw as Record<string, unknown>;
-    if ("answer" in obj || "catalysts" in obj || "bottomLine" in obj || "bottom_line" in obj) return obj;
-    const inner = pick(obj, "report", "data", "result", "output", "response", "content", "message");
-    return inner !== undefined ? unwrap(inner, depth + 1) : obj;
+    const o = raw as Json;
+    // A report-shaped object stops the unwrapping.
+    for (const key of ["summary", "answer", "drivers", "catalysts", "bottom_line", "bottomLine"]) {
+      if (key in o) return o;
+    }
+    const inner = pick(o, "report", "data", "result", "output", "response", "content", "message");
+    return inner !== undefined ? unwrap(inner, depth + 1) : o;
   }
 
   return raw;
 }
 
-/** Accepts both camelCase and snake_case keys from the upstream. */
-function toCanonical(body: unknown, mint: string): Record<string, unknown> {
-  const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+/** The market strip, built from whichever movement figures are present. */
+function metricsFrom(movement: Json): { label: string; value: string; direction: string }[] {
+  const out: { label: string; value: string; direction: string }[] = [];
+  const add = (label: string, value: string | null, direction: string) => {
+    if (value !== null && out.length < 8) out.push({ label, value, direction });
+  };
 
-  const token = pick(o, "token", "tokenIdentity", "token_identity", "identity");
-  const tokenObj = (token && typeof token === "object" ? token : {}) as Record<string, unknown>;
+  add("24h", pct(movement.price_change_24h_pct), dir(movement.price_change_24h_pct));
+  add("6h", pct(movement.price_change_6h_pct), dir(movement.price_change_6h_pct));
+  add("1h", pct(movement.price_change_1h_pct), dir(movement.price_change_1h_pct));
+  add("Price", usd(movement.price_usd), "flat");
+  add("Market cap", usd(movement.market_cap_usd), "flat");
+  add("Liquidity", usd(movement.liquidity_usd), "flat");
+  add("Volume 24h", usd(movement.volume_24h_usd), "up");
+  add("From 24h high", pct(movement.drawdown_from_24h_high_pct), dir(movement.drawdown_from_24h_high_pct));
+  return out;
+}
 
-  // Market data may arrive nested or flat.
-  const market = pick(o, "market", "marketMovement", "market_movement");
-  const marketObj = (market && typeof market === "object" ? market : {}) as Record<string, unknown>;
+/** Prose describing the move, including the inflection the agent identified. */
+function marketSummaryFrom(movement: Json): string {
+  const parts: string[] = [];
+  const classification = str(movement.classification);
+  if (classification) parts.push(classification.replace(/_/g, " ").toLowerCase());
 
-  const rawCatalysts = pick(o, "catalysts", "rankedCatalysts", "ranked_catalysts") ?? [];
-  const rawSources = pick(o, "sources", "sourceLedger", "source_ledger", "citations") ?? [];
+  const inflection = obj(movement.main_inflection);
+  const at = str(inflection.time_utc);
+  const change = pct(inflection.change_pct);
+  const vol = usd(inflection.candle_volume_usd);
+  if (at && change) {
+    parts.push(
+      `The main inflection was at ${at}: ${change} on a single candle${vol ? ` with ${vol} of volume` : ""}.`,
+    );
+  }
+  return parts.join(". ").replace(/\.\./g, ".");
+}
 
-  // Social, wallet and creator findings collapse into one narrative field.
-  const narrativeParts = [
-    pick(o, "narrative"),
-    pick(o, "social", "socialAnalysis", "social_analysis"),
-    pick(o, "wallets", "walletActivity", "wallet_activity"),
-    pick(o, "creator", "creatorActivity", "creator_activity"),
-  ]
-    .map((part) => {
-      if (typeof part === "string") return part;
-      if (part && typeof part === "object") {
-        const p = part as Record<string, unknown>;
-        const s = pick(p, "summary", "narrative", "detail", "text");
-        return typeof s === "string" ? s : "";
-      }
-      return "";
-    })
-    .filter(Boolean);
+/** Folds the agent's narrative object, socials, wallets and creator into prose. */
+function narrativeFrom(o: Json): string {
+  const parts: string[] = [];
+  const n = obj(o.narrative);
+
+  const categories = arr(n.categories).filter((c) => typeof c === "string");
+  if (categories.length) parts.push(`**Category:** ${categories.join(", ")}`);
+  for (const key of ["origin", "lore", "token_connection", "maturity"]) {
+    const v = str(n[key]);
+    if (v) parts.push(v);
+  }
+
+  const social = arr(o.social);
+  if (social.length) {
+    const lines = social.slice(0, 8).map((raw) => {
+      const s = obj(raw);
+      const who = str(s.account) || "account";
+      const when = str(s.published_at);
+      const what = str(s.event) || str(s.classification);
+      return `- ${who}${when ? ` (${when})` : ""}: ${what}`;
+    });
+    parts.push(`**Socials**\n${lines.join("\n")}`);
+  }
+
+  const wallets = arr(o.wallet_activity);
+  if (wallets.length) {
+    const lines = wallets.slice(0, 8).map((raw) => `- ${str(obj(raw).finding)}`).filter((l) => l.length > 2);
+    if (lines.length) parts.push(`**Wallets**\n${lines.join("\n")}`);
+  }
+
+  const creator = obj(o.creator_activity);
+  const creatorBits = Object.entries(creator)
+    .filter(([k, v]) => typeof v === "string" && v && !["label", "status"].includes(k))
+    .slice(0, 6)
+    .map(([k, v]) => `- ${k.replace(/_/g, " ")}: ${String(v)}`);
+  if (creatorBits.length) parts.push(`**Creator**\n${creatorBits.join("\n")}`);
+
+  const limitations = arr(o.limitations).filter((l) => typeof l === "string");
+  if (limitations.length) {
+    parts.push(`**Limitations**\n${limitations.slice(0, 6).map((l) => `- ${l}`).join("\n")}`);
+  }
+
+  return parts.join("\n\n");
+}
+
+/** Maps the agent's reply onto the report contract. */
+function toCanonical(body: unknown, mint: string): Json {
+  const o = obj(body);
+  const token = obj(pick(o, "token", "tokenIdentity", "token_identity", "identity"));
+  const movement = obj(pick(o, "movement", "market", "marketMovement", "market_movement"));
+
+  // `drivers` is what this agent calls its ranked catalysts.
+  const rawDrivers = arr(pick(o, "drivers", "catalysts", "rankedCatalysts", "ranked_catalysts"));
+  const catalysts = rawDrivers.map((raw) => {
+    const d = obj(raw);
+    const confidence = pick(d, "confidence", "confidenceScore", "confidence_score", "score");
+    return {
+      title: str(pick(d, "title", "name")),
+      // The agent puts its reasoning in `evidence`.
+      summary: str(pick(d, "evidence", "summary", "detail", "description")),
+      confidence: typeof confidence === "number" ? (confidence > 1 ? confidence / 100 : confidence) : 0,
+      label: pick(d, "label", "classification") ?? "UNKNOWN",
+      sourceIds: pick(d, "source_ids", "sourceIds", "sources") ?? [],
+    };
+  });
+
+  const risks = arr(pick(o, "risks", "riskFactors", "risk_factors")).map((raw) => {
+    const r = obj(raw);
+    return {
+      title: str(pick(r, "title", "name")),
+      severity: str(pick(r, "severity", "level")).toLowerCase() || "unknown",
+      detail: str(pick(r, "detail", "description", "summary")),
+      label: pick(r, "label") ?? "UNKNOWN",
+      sourceIds: pick(r, "source_ids", "sourceIds") ?? [],
+    };
+  });
+
+  const sources = arr(pick(o, "sources", "sourceLedger", "source_ledger", "citations")).map((raw, i) => {
+    const s = obj(raw);
+    return {
+      id: str(s.id) || `s${i + 1}`,
+      title: str(pick(s, "title", "name")) || str(s.url) || "Source",
+      url: s.url,
+      publisher: pick(s, "publisher", "source"),
+    };
+  });
 
   return {
-    answer: pick(o, "answer", "tenSecondAnswer", "ten_second_answer", "summary", "tldr") ?? "",
+    answer: pick(o, "summary", "answer", "tenSecondAnswer", "ten_second_answer", "tldr") ?? "",
     token: {
-      name: pick(tokenObj, "name") ?? null,
-      symbol: pick(tokenObj, "symbol", "ticker") ?? null,
+      name: pick(token, "name") ?? null,
+      symbol: pick(token, "symbol", "ticker") ?? null,
       mint,
-      pool: pick(tokenObj, "pool", "primaryPool", "primary_pool", "dex") ?? null,
+      pool: pick(token, "primary_pool", "pool", "primaryPool", "dex") ?? null,
     },
-    metrics: pick(marketObj, "metrics") ?? pick(o, "metrics") ?? [],
-    marketSummary:
-      pick(marketObj, "summary", "detail") ?? pick(o, "marketSummary", "market_summary") ?? "",
-    catalysts: Array.isArray(rawCatalysts)
-      ? rawCatalysts.map((c) => {
-          const cc = (c && typeof c === "object" ? c : {}) as Record<string, unknown>;
-          const conf = pick(cc, "confidence", "confidenceScore", "confidence_score");
-          return {
-            ...cc,
-            // Accept 0-100 confidence and rescale to 0-1.
-            confidence: typeof conf === "number" ? (conf > 1 ? conf / 100 : conf) : 0,
-            sourceIds: pick(cc, "sourceIds", "source_ids", "sources") ?? [],
-          };
-        })
-      : [],
-    narrative: narrativeParts.join("\n\n"),
-    risks: pick(o, "risks", "riskFactors", "risk_factors") ?? [],
-    bottomLine: pick(o, "bottomLine", "bottom_line", "conclusion") ?? "",
-    sources: Array.isArray(rawSources)
-      ? rawSources.map((s, i) => {
-          const ss = (s && typeof s === "object" ? s : { url: s }) as Record<string, unknown>;
-          return {
-            ...ss,
-            id: typeof ss.id === "string" ? ss.id : `s${i + 1}`,
-            title: typeof ss.title === "string" && ss.title ? ss.title : String(ss.url ?? "Source"),
-          };
-        })
-      : [],
-    snapshotAt: pick(o, "snapshotAt", "snapshot_at", "generatedAt") ?? new Date().toISOString(),
-    missingSections: pick(o, "missingSections", "missing_sections") ?? [],
+    metrics: metricsFrom(movement),
+    marketSummary: marketSummaryFrom(movement) || str(pick(movement, "summary", "detail")),
+    catalysts,
+    narrative: narrativeFrom(o),
+    risks,
+    bottomLine: pick(o, "bottom_line", "bottomLine", "conclusion") ?? "",
+    sources,
+    snapshotAt: pick(o, "snapshot_at", "snapshotAt", "generatedAt") ?? new Date().toISOString(),
+    missingSections: [],
   };
 }
 
@@ -142,10 +256,16 @@ export function normalizeBase44Payload(
     return { ok: false, code: "malformed_response", detail: "Upstream response was not a report object" };
   }
 
-  const parsed = reportSchema.safeParse(toCanonical(body, opts.mint));
+  const source = obj(body);
+  // The agent reports its own completeness; a run still in progress is not a
+  // report yet, so it is left to the poller rather than rendered.
+  const status = str(source.status).toLowerCase();
+  if (status && status !== "completed" && status !== "partial" && status !== "success") {
+    return { ok: false, code: "malformed_response", detail: `Upstream status is "${status}"` };
+  }
+
+  const parsed = reportSchema.safeParse(toCanonical(source, opts.mint));
   if (!parsed.success) {
-    // Naming the offending fields makes an upstream format change diagnosable
-    // from the server log without dumping the payload.
     const where = parsed.error.issues
       .slice(0, 5)
       .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
@@ -166,5 +286,5 @@ export function normalizeBase44Payload(
     return { ok: false, code: "oversized_response", detail: "Normalized report exceeded the size limit" };
   }
 
-  return { ok: true, report };
+  return { ok: true, report, partial: source.partial === true || status === "partial" };
 }

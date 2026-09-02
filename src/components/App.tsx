@@ -40,7 +40,6 @@ export function App() {
   const [elapsed, setElapsed] = useState(0);
 
   const inputRef = useRef<HTMLInputElement>(null);
-  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadAccess = useCallback(async () => {
     try {
@@ -55,8 +54,6 @@ export function App() {
     void loadAccess();
   }, [loadAccess]);
 
-  useEffect(() => () => { if (pollRef.current) clearTimeout(pollRef.current); }, []);
-
   // A deep research run takes minutes, so the wait is shown honestly.
   useEffect(() => {
     if (!busy) { setElapsed(0); return; }
@@ -64,34 +61,6 @@ export function App() {
     const id = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000);
     return () => clearInterval(id);
   }, [busy]);
-
-  const poll = useCallback(async (id: string, attempt = 0) => {
-    try {
-      const res = await fetch(`/api/analyze/${id}`, { cache: "no-store" });
-      const data = (await res.json()) as Job & { error?: string };
-      if (!res.ok) {
-        setError(data.error ?? "Lost track of that analysis.");
-        setBusy(false);
-        return;
-      }
-      setJob(data);
-      if (data.status === "done") {
-        setBusy(false);
-        return;
-      }
-      if (data.status === "error") {
-        setError(data.error ?? "That analysis didn't finish.");
-        setErrorCode(data.errorCode ?? null);
-        setBusy(false);
-        return;
-      }
-      pollRef.current = setTimeout(() => void poll(id, attempt + 1), attempt < 3 ? 900 : 3000);
-    } catch {
-      // A network blip must not end a run the server is still working on.
-      // Back off and keep asking; the job outlives any single failed poll.
-      pollRef.current = setTimeout(() => void poll(id, attempt + 1), Math.min(15000, 2000 + attempt * 500));
-    }
-  }, []);
 
   const check = validateSolanaAddress(address);
   const locked = access?.needsCode === true && access.unlocked === false;
@@ -122,8 +91,13 @@ export function App() {
         return;
       }
       setJob(data);
-      if (data.status === "done") setBusy(false);
-      else void poll(data.id);
+      if (data.status === "error") {
+        setError(data.error ?? "That analysis didn't finish.");
+        setErrorCode(data.errorCode ?? null);
+      } else if (data.status !== "done") {
+        setError("The research service ended without returning a report.");
+      }
+      setBusy(false);
     } catch {
       setError("Network problem. Try again.");
       setBusy(false);
@@ -297,13 +271,13 @@ export function App() {
         )}
 
         {/* ---- Progress: the agent thinking out loud ---- */}
-        {busy && job?.status === "running" && (
+        {busy && (!job || job.status === "running") && (
           <div className="mt-10">
             <ProgressPanel
-              progress={job.progress ?? []}
-              stage={job.stage}
+              progress={job?.progress ?? []}
+              stage={job?.stage ?? "verifying_token"}
               elapsed={elapsed}
-              startedAt={job.timing?.caReceivedAt ?? null}
+              startedAt={job?.timing?.caReceivedAt ?? null}
             />
           </div>
         )}

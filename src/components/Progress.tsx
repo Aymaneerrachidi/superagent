@@ -63,7 +63,7 @@ export function ProgressPanel({
         ))}
       </div>
       <p className="px-5 pt-2 text-[0.75rem] text-paper-3">
-        {STAGES[stageIndex]?.label ?? "Working"}
+        {progress.length === 0 ? "Waiting for Base44 report" : (STAGES[stageIndex]?.label ?? "Working")}
       </p>
 
       {/* The agent's own words. */}
@@ -74,7 +74,7 @@ export function ProgressPanel({
       >
         {progress.length === 0 ? (
           <li className="text-[0.8125rem] text-paper-3 italic">
-            Waiting for the agent to start reporting back…
+            Base44 is researching. The report will appear here when it finishes…
           </li>
         ) : (
           progress.map((p, i) => {
@@ -104,8 +104,7 @@ export function ProgressPanel({
       </ol>
 
       <p className="border-t border-line px-5 py-3 text-[0.7rem] text-paper-3">
-        This keeps running if you switch tabs. There is no time limit — it waits until the
-        agent is done.
+        You can switch tabs; keep this page open while the research request runs.
       </p>
     </div>
   );

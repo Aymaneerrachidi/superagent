@@ -78,6 +78,35 @@ export type StartResult =
 export type JobScheduler = (task: () => Promise<void>) => void;
 
 /**
+ * Runs an analysis to completion inside the current request.
+ *
+ * Serverless route handlers cannot hand an in-memory job to a later polling
+ * request reliably: that request may execute in a different function instance.
+ * Keeping the work and result in one invocation removes that dependency while
+ * retaining the same spend guard, cache, normalization and logging paths.
+ */
+export async function startAnalysisAndWait(address: string, who: string): Promise<StartResult> {
+  let task: (() => Promise<void>) | undefined;
+  const started = startAnalysis(address, who, (scheduled) => {
+    task = scheduled;
+  });
+
+  if (!started.ok || started.job.status !== "running") return started;
+
+  if (task) {
+    await task();
+  } else {
+    // Another request in this same process already owns the run. Wait on the
+    // shared job object rather than buying the same report twice.
+    while (started.job.status === "running") {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+
+  return started;
+}
+
+/**
  * Starts an analysis, or returns a cached report.
  *
  * `who` is a coarse caller key (the access cookie, or "anon"). It only spaces

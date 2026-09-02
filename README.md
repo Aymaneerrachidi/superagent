@@ -91,9 +91,9 @@ assistant  Pulling the point-in-time market snapshot...
 assistant  ```json { "answer": ... }        <- the report
 ```
 
-Those narration lines are streamed to the browser and shown live, so you watch
-the agent think instead of staring at a spinner. The run ends when a message
-parses into a report; unparseable messages mean it is still working.
+The website keeps one request open while the agent works and shows an honest
+elapsed-time research state. The run ends when a message parses into a report;
+unparseable messages mean it is still working.
 
 **A full run takes about 4-5 minutes.** There is no deadline: the app waits for
 the real report. Setting `PARTIAL_AFTER_SECONDS` adds one, after which whatever
@@ -134,12 +134,13 @@ BASE44_AUTH_HEADER=authorization       # with BASE44_AUTH_SCHEME=Bearer
 
 ```
 browser  ->  /api/analyze  ->  spend guard  ->  Base44 adapter  ->  Superagent
-                  |
-             in-memory job  <-  /api/analyze/:id  (polled)
+   ^              |
+   └──── report ──┘        (one request; no cross-instance polling state)
 ```
 
 - **The browser never touches Base44.** The key is read only in `live.ts`, on the server.
-- Jobs live in a `Map`. They're short-lived; a restart losing them costs nothing.
+- A short-lived in-memory job tracks the work inside the request; the completed
+  report is returned directly, so another serverless instance never has to find it.
 - Reports for the same address are cached for 15 minutes, so a repeat costs nothing.
 - Report content is untrusted: it's schema-validated, stripped of markup and control
   characters, and rendered as React elements — never as an HTML string. Only `http(s)`
@@ -163,16 +164,12 @@ environment variables you want, deploy.
 
 Two notes for a serverless deployment:
 
-- Jobs are per-instance. With multiple instances a poll can land on an instance that
-  doesn't know the job. For a handful of users on a Vercel Hobby project this is fine;
-  if it becomes a problem, the fix is a shared store (Redis/KV) behind
-  `src/lib/jobs/store.ts`.
+- The request stays open until research completes, avoiding per-instance polling
+  state. Vercel Hobby still enforces its 300-second function ceiling.
 - `MAX_ANALYSES_PER_DAY` is also per-instance, so treat it as a soft ceiling.
-- The analyze endpoint returns as soon as it creates the in-memory job and uses
-  Vercel Hobby's supported `maxDuration = 300`. The Base44 conversation then
-  continues in that instance while the browser polls the job. For dependable
-  multi-minute work on serverless, move the job behind a durable queue/worker;
-  `npm start`, a VPS, or a container can keep the current in-process model alive.
+- The analyze endpoint uses Vercel Hobby's supported `maxDuration = 300`. Runs
+  longer than five minutes still require a durable queue/worker or a self-hosted
+  process (`npm start`, a VPS, or a container).
 
 ## Operations
 

@@ -80,17 +80,18 @@ describe("access", () => {
     expect(token).not.toContain("correct-horse-battery");
 
     const ok = await analyze(post({ address: MINT }, `${ACCESS_COOKIE}=${token}`));
-    expect(ok.status).toBe(202);
+    expect(ok.status).toBe(200);
   });
 });
 
 describe("analysis", () => {
   it("starts a job for a valid address", async () => {
     const res = await analyze(post({ address: MINT }));
-    expect(res.status).toBe(202);
-    const body = (await res.json()) as { id: string; status: string };
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { id: string; status: string; report: unknown };
     expect(body.id).toBeTruthy();
-    expect(["running", "done"]).toContain(body.status);
+    expect(body.status).toBe("done");
+    expect(body.report).toBeTruthy();
   });
 
   it("attaches adapter work to the supplied background scheduler", async () => {

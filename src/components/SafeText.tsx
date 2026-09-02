@@ -8,6 +8,7 @@
  */
 import { Fragment, type ReactNode } from "react";
 import { parseSafeMarkdown, type Block, type Inline } from "@/lib/report/safe-markdown";
+import { cleanVisibleText } from "@/lib/security/text";
 
 function renderInline(nodes: Inline[], keyPrefix = "i"): ReactNode {
   return nodes.map((node, i) => {
@@ -90,5 +91,5 @@ export function SafeMarkdown({ children, className }: { children: string; classN
  * a text node, which React escapes.
  */
 export function SafeText({ children }: { children: string }) {
-  return <>{children}</>;
+  return <>{cleanVisibleText(children)}</>;
 }

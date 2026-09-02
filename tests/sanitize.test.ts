@@ -1,7 +1,7 @@
 /** Scenario 19: hostile report content is neutralized before rendering. */
 import { describe, it, expect } from "vitest";
 import { parseSafeMarkdown, blocksToPlainText, type Block, type Inline } from "@/lib/report/safe-markdown";
-import { safeHref, stripUnsafeChars } from "@/lib/security/text";
+import { cleanVisibleText, safeHref, stripUnsafeChars } from "@/lib/security/text";
 import { reportSchema } from "@/lib/report/schema";
 import { normalizeBase44Payload } from "@/lib/base44/normalize";
 
@@ -172,5 +172,15 @@ describe("report sanitization", () => {
     for (const input of ["```unclosed", "[broken](", "> > > > >", "| a | b |\n|---|", "*".repeat(5000)]) {
       expect(() => parseSafeMarkdown(input)).not.toThrow();
     }
+  });
+
+  it("19n. removes visible Markdown debris and repeated quote marks", () => {
+    expect(blocksToPlainText(parseSafeMarkdown("**$1.5M–$1.7M market cap**"))).toBe(
+      "$1.5M–$1.7M market cap",
+    );
+    expect(blocksToPlainText(parseSafeMarkdown("**$1.5M–$1.7M market cap"))).toBe(
+      "$1.5M–$1.7M market cap",
+    );
+    expect(cleanVisibleText("''market cap''; it's moving")).toBe("market cap; it's moving");
   });
 });

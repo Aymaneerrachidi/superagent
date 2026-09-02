@@ -7,8 +7,8 @@
  */
 import type { Report, Source, EvidenceLabel } from "@/lib/report/schema";
 import { evidenceMix } from "@/lib/report/schema";
-import { safeHref } from "@/lib/security/text";
-import { SafeMarkdown } from "@/components/SafeText";
+import { cleanVisibleText, safeHref } from "@/lib/security/text";
+import { SafeMarkdown, SafeText } from "@/components/SafeText";
 
 const cx = (...p: (string | false | null | undefined)[]) => p.filter(Boolean).join(" ");
 
@@ -76,7 +76,7 @@ function Refs({ ids, sources }: { ids: string[]; sources: Source[] }) {
         <a
           key={n}
           href={`#src-${n}`}
-          title={source.title}
+          title={cleanVisibleText(source.title)}
           className="tnum rounded bg-ink-3 px-1 text-[0.5625rem] text-paper-3 transition-colors hover:bg-fact/15 hover:text-fact"
         >
           {n}
@@ -118,19 +118,19 @@ export function ReportView({
       <section className="relative overflow-hidden rounded-2xl border border-line bg-ink-2 p-6 sm:p-8">
         <div className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-2">
           {report.token?.symbol && (
-            <span className="font-mono text-sm font-medium text-paper">${report.token.symbol}</span>
+            <span className="font-mono text-sm font-medium text-paper">$<SafeText>{report.token.symbol}</SafeText></span>
           )}
-          {report.token?.name && <span className="text-sm text-paper-2">{report.token.name}</span>}
+          {report.token?.name && <span className="text-sm text-paper-2"><SafeText>{report.token.name}</SafeText></span>}
           {report.token?.pool && (
             <span className="rounded bg-ink-3 px-1.5 py-0.5 font-mono text-[0.625rem] text-paper-3">
-              {report.token.pool}
+              <SafeText>{report.token.pool}</SafeText>
             </span>
           )}
         </div>
 
-        <p className="font-display text-[1.5rem] leading-[1.3] tracking-[-0.01em] text-paper sm:text-[1.75rem]">
+        <SafeMarkdown className="font-display text-[1.5rem] leading-[1.3] tracking-[-0.01em] text-paper sm:text-[1.75rem]">
           {report.answer || "No verdict was produced for this run."}
-        </p>
+        </SafeMarkdown>
 
         {/* The evidence ledger: how much of this report is fact vs. guess. */}
         {total > 0 && (
@@ -170,7 +170,7 @@ export function ReportView({
 
       {report.missingSections.length > 0 && (
         <p className="rounded-2xl border border-unknown/25 bg-unknown/[0.06] px-5 py-3 text-[0.8125rem] text-paper-2">
-          <span className="text-paper">Partial report.</span> Missing: {report.missingSections.join(", ")}.
+          <span className="text-paper">Partial report.</span> Missing: <SafeText>{report.missingSections.join(", ")}</SafeText>.
         </p>
       )}
 
@@ -182,7 +182,7 @@ export function ReportView({
               {report.metrics.map((m, i) => (
                 <div key={i} className="bg-ink-3 px-3 py-3">
                   <div className="truncate font-mono text-[0.5625rem] tracking-[0.1em] text-paper-3 uppercase">
-                    {m.label}
+                    <SafeText>{m.label}</SafeText>
                   </div>
                   <div
                     className={cx(
@@ -192,7 +192,7 @@ export function ReportView({
                       (m.direction === "flat" || m.direction === "unknown") && "text-paper",
                     )}
                   >
-                    {m.value}
+                    <SafeText>{m.value}</SafeText>
                   </div>
                 </div>
               ))}
@@ -217,7 +217,7 @@ export function ReportView({
                 />
                 <div className="mb-1.5 flex flex-wrap items-center gap-2.5">
                   <span className="tnum text-[0.6875rem] text-paper-3">{i + 1}.</span>
-                  <h3 className="text-[0.9375rem] leading-snug font-medium text-paper">{c.title}</h3>
+                  <h3 className="text-[0.9375rem] leading-snug font-medium text-paper"><SafeText>{c.title}</SafeText></h3>
                   <Tag label={c.label} />
                   <span
                     className="tnum ml-auto text-[0.6875rem] text-paper-3"
@@ -263,7 +263,7 @@ export function ReportView({
                       {r.severity}
                     </span>
                   )}
-                  <h3 className="text-[0.9375rem] font-medium text-paper">{r.title}</h3>
+                  <h3 className="text-[0.9375rem] font-medium text-paper"><SafeText>{r.title}</SafeText></h3>
                   <Tag label={r.label} />
                 </div>
                 <SafeMarkdown className="prose prose-points text-[0.875rem]">{r.detail}</SafeMarkdown>
@@ -298,14 +298,14 @@ export function ReportView({
                         rel="noopener noreferrer nofollow ugc"
                         className="text-[0.875rem] text-paper transition-colors hover:text-fact"
                       >
-                        {s.title}
+                        <SafeText>{s.title}</SafeText>
                       </a>
                     ) : (
                       // A link that failed the http(s) check renders as inert text.
-                      <span className="text-[0.875rem] text-paper-3">{s.title} (unsafe link removed)</span>
+                      <span className="text-[0.875rem] text-paper-3"><SafeText>{s.title}</SafeText> (unsafe link removed)</span>
                     )}
                     <div className="mt-0.5 font-mono text-[0.625rem] text-paper-3">
-                      {s.publisher ?? (href ? new URL(href).hostname : "")}
+                      <SafeText>{s.publisher ?? (href ? new URL(href).hostname : "")}</SafeText>
                     </div>
                   </div>
                 </li>

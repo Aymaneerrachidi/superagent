@@ -38,6 +38,21 @@ export function stripUnsafeChars(input: unknown, allowNewlines = true): string {
   return out;
 }
 
+/**
+ * Removes formatting debris that should never be visible in report copy.
+ *
+ * Matched Markdown is handled by the safe Markdown parser. This fallback also
+ * catches incomplete emphasis from upstream responses, such as `**$1.5M`, and
+ * repeated quote markers while preserving apostrophes in words like `it's`.
+ */
+export function cleanVisibleText(input: unknown): string {
+  return stripUnsafeChars(input)
+    .replace(/\*+/g, "")
+    .replace(/[\u201c\u201d"]/g, "")
+    .replace(/'{2,}/g, "")
+    .replace(/[\u2018\u2019]{2,}/g, "");
+}
+
 
 /**
  * Elements whose *contents* are removed along with the tags. Leaving the body

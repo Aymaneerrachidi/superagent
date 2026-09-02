@@ -8,7 +8,7 @@
  * unsafe embeds have no representation in this AST and therefore cannot render.
  */
 import { marked, type Tokens, type Token } from "marked";
-import { safeHref, stripUnsafeChars, neutralizeMarkup } from "@/lib/security/text";
+import { cleanVisibleText, safeHref, stripUnsafeChars, neutralizeMarkup } from "@/lib/security/text";
 
 export { safeHref };
 
@@ -43,11 +43,11 @@ function inlineFrom(tokens: Token[] | undefined, depth = 0): Inline[] {
       case "text": {
         const t = tok as Tokens.Text;
         if (t.tokens && t.tokens.length > 0) out.push(...inlineFrom(t.tokens, depth + 1));
-        else out.push({ t: "text", v: stripControl(t.text).slice(0, MAX_TEXT) });
+        else out.push({ t: "text", v: cleanVisibleText(t.text).slice(0, MAX_TEXT) });
         break;
       }
       case "escape":
-        out.push({ t: "text", v: stripControl((tok as Tokens.Escape).text) });
+        out.push({ t: "text", v: cleanVisibleText((tok as Tokens.Escape).text) });
         break;
       case "strong":
         out.push({ t: "strong", c: inlineFrom((tok as Tokens.Strong).tokens, depth + 1) });
@@ -77,7 +77,7 @@ function inlineFrom(tokens: Token[] | undefined, depth = 0): Inline[] {
         // Remote images are not embedded. The alt text is kept as prose.
         const im = tok as Tokens.Image;
         const alt = stripControl(im.text || im.title || "image");
-        if (alt) out.push({ t: "text", v: alt });
+        if (alt) out.push({ t: "text", v: cleanVisibleText(alt) });
         break;
       }
       case "html":
@@ -85,7 +85,7 @@ function inlineFrom(tokens: Token[] | undefined, depth = 0): Inline[] {
         break;
       default: {
         const anyTok = tok as { raw?: string; text?: string };
-        const fallback = stripControl(anyTok.text ?? "");
+        const fallback = cleanVisibleText(anyTok.text ?? "");
         if (fallback) out.push({ t: "text", v: fallback.slice(0, MAX_TEXT) });
         break;
       }
@@ -145,7 +145,7 @@ function blocksFrom(tokens: Token[], depth = 0): Block[] {
       }
       default: {
         const anyTok = tok as { text?: string };
-        if (anyTok.text) out.push({ t: "p", c: [{ t: "text", v: stripControl(anyTok.text).slice(0, MAX_TEXT) }] });
+        if (anyTok.text) out.push({ t: "p", c: [{ t: "text", v: cleanVisibleText(anyTok.text).slice(0, MAX_TEXT) }] });
         break;
       }
     }

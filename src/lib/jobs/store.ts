@@ -74,13 +74,16 @@ export type StartResult =
   | { ok: true; job: Job }
   | { ok: false; message: string; retryAfter?: number };
 
+/** Lets a route attach long-running work to its host's request lifecycle. */
+export type JobScheduler = (task: () => Promise<void>) => void;
+
 /**
  * Starts an analysis, or returns a cached report.
  *
  * `who` is a coarse caller key (the access cookie, or "anon"). It only spaces
  * out requests; it is not an identity and nothing is stored against it.
  */
-export function startAnalysis(address: string, who: string): StartResult {
+export function startAnalysis(address: string, who: string, schedule?: JobScheduler): StartResult {
   sweep();
 
   if (!env.analysisEnabled) {
@@ -169,7 +172,8 @@ export function startAnalysis(address: string, who: string): StartResult {
     snapshotAt: null,
   };
   jobs.set(job.id, job);
-  void run(job);
+  if (schedule) schedule(() => run(job));
+  else void run(job);
   return { ok: true, job };
 }
 

@@ -7,20 +7,9 @@
  * never. That was a real bug, and these guard against its return.
  */
 import { describe, it, expect } from "vitest";
+import { newAssistantReplies } from "@/lib/base44/live";
 
 type Msg = { id: string; role: string; content: string };
-
-/** Mirrors the adapter's matching, which is not exported. */
-function newAssistantReplies(messages: Msg[], anchorId: string | null, idsBefore: ReadonlySet<string>) {
-  const collect = (from: number) =>
-    messages.slice(from).filter((m) => m.role === "assistant" && m.content.trim());
-
-  if (anchorId) {
-    const at = messages.findIndex((m) => m.id === anchorId);
-    if (at >= 0) return collect(at + 1);
-  }
-  return messages.filter((m) => m.role === "assistant" && m.content.trim() && !idsBefore.has(m.id));
-}
 
 const CAP = 200;
 
@@ -96,5 +85,29 @@ describe("reply matching", () => {
     convo = push(convo, { id: "report", role: "assistant", content: '{"status":"completed"}' });
 
     expect(newAssistantReplies(convo, "mine", idsBefore).map((m) => m.id)).toEqual(["report"]);
+  });
+
+  it("does not treat an assistant result id returned by POST as the user anchor", () => {
+    let convo = fullHistory();
+    const idsBefore = new Set(convo.map((m) => m.id));
+    convo = push(convo, { id: "mine", role: "user", content: "<CA>" });
+    convo = push(convo, { id: "report", role: "assistant", content: '{"status":"completed"}' });
+
+    // Some Base44 deployments return the result message from POST /messages.
+    // Searching after this id would permanently miss the report itself.
+    const found = newAssistantReplies(convo, "report", idsBefore, "<CA>");
+    expect(found.map((m) => m.id)).toEqual(["report"]);
+  });
+
+  it("finds the submitted user message by exact CA when POST returns no usable anchor", () => {
+    let convo = fullHistory();
+    const idsBefore = new Set(convo.map((m) => m.id));
+    convo = push(convo, { id: "other-user", role: "user", content: "<OTHER>" });
+    convo = push(convo, { id: "other-reply", role: "assistant", content: "Other result" });
+    convo = push(convo, { id: "mine", role: "user", content: "<CA>" });
+    convo = push(convo, { id: "my-report", role: "assistant", content: '{"status":"completed"}' });
+
+    const found = newAssistantReplies(convo, null, idsBefore, "<CA>");
+    expect(found.map((m) => m.id)).toEqual(["my-report"]);
   });
 });

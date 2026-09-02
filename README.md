@@ -168,11 +168,11 @@ Two notes for a serverless deployment:
   if it becomes a problem, the fix is a shared store (Redis/KV) behind
   `src/lib/jobs/store.ts`.
 - `MAX_ANALYSES_PER_DAY` is also per-instance, so treat it as a soft ceiling.
-- **Serverless imposes the ceiling that the app does not.** `maxDuration = 800` on
-  the analyze route is the Vercel Fluid Compute maximum, so an unlimited wait is
-  only truly unlimited when you run the app yourself (`npm start`, a VPS, a
-  container). On Vercel a run longer than ~13 minutes is killed by the platform
-  regardless of `BASE44_TIMEOUT_MS`.
+- The analyze endpoint returns as soon as it creates the in-memory job and uses
+  Vercel Hobby's supported `maxDuration = 300`. The Base44 conversation then
+  continues in that instance while the browser polls the job. For dependable
+  multi-minute work on serverless, move the job behind a durable queue/worker;
+  `npm start`, a VPS, or a container can keep the current in-process model alive.
 
 ## Operations
 

@@ -101,6 +101,9 @@ async function call(
 }
 
 function messagesOf(conversation: unknown): Message[] {
+  // Accept both the documented conversation envelope and deployments that
+  // return the message list directly.
+  if (Array.isArray(conversation)) return conversation as Message[];
   const c = conversation as Json | null;
   return c && Array.isArray(c.messages) ? (c.messages as Message[]) : [];
 }
@@ -133,10 +136,11 @@ function contentOf(message: Message): string {
  * An earlier version subtracted a baseline count instead, which silently
  * scanned past the end of a capped array and found the reply never.
  */
-function newAssistantReplies(
+export function newAssistantReplies(
   conversation: unknown,
   anchorId: string | null,
   idsBefore: ReadonlySet<string>,
+  submittedMint?: string,
 ) {
   const messages = messagesOf(conversation);
   const collect = (from: number) => {
@@ -152,7 +156,25 @@ function newAssistantReplies(
 
   if (anchorId) {
     const at = messages.findIndex((m) => m.id === anchorId);
-    if (at >= 0) return collect(at + 1);
+    // Base44 deployments differ in what POST /messages returns. Some return
+    // the submitted user message, while others return an assistant/result
+    // message. Only a user message is a trustworthy positional anchor; using
+    // an assistant report as the anchor makes us search *after* the answer and
+    // leaves the website polling forever.
+    if (at >= 0 && messages[at]?.role === "user") return collect(at + 1);
+  }
+
+  // If the POST response did not identify our user message, locate the newly
+  // added message by its exact content. The mint is validated before it reaches
+  // this adapter, so exact matching is both safe and unambiguous in normal use.
+  if (submittedMint) {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i];
+      if (!message || message.role !== "user") continue;
+      const id = message.id ?? `i${i}`;
+      if (idsBefore.has(id)) continue;
+      if (contentOf(message).trim() === submittedMint) return collect(i + 1);
+    }
   }
 
   // Our message is gone or was never identified: anything unseen is new.
@@ -300,7 +322,7 @@ export class LiveBase44Adapter implements Base44Adapter {
           continue;
         }
 
-        const replies = newAssistantReplies(polled.data, anchorId, idsBefore);
+        const replies = newAssistantReplies(polled.data, anchorId, idsBefore, req.mint);
         // One line per poll, so a stuck run says why instead of just sitting
         // there: how many messages exist, whether our own was found, and how
         // many replies were considered new.

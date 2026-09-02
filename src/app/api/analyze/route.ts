@@ -4,7 +4,7 @@
  * The browser never reaches Base44. It talks to this route, which validates the
  * address, applies the spend guard, and calls the adapter server-side.
  */
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { hasAccess } from "@/lib/access";
 import { validateSolanaAddress, ADDRESS_MESSAGES, MAX_INPUT_LENGTH } from "@/lib/solana/address";
 import { startAnalysis, publicJob } from "@/lib/jobs/store";
@@ -12,12 +12,9 @@ import { ACCESS_COOKIE } from "@/lib/access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-/**
- * Vercel caps how long a function may run. The research call continues after
- * this response is sent, so the ceiling has to cover it. 800s is the Fluid
- * Compute maximum; locally this value is ignored.
- */
-export const maxDuration = 800;
+// Vercel Hobby accepts at most 300 seconds. `after()` below keeps the Base44
+// work attached to the invocation after the 202 response has been sent.
+export const maxDuration = 300;
 
 const no = (message: string, status: number, retryAfter?: number) =>
   NextResponse.json(
@@ -50,7 +47,13 @@ export async function POST(req: Request) {
   const check = validateSolanaAddress(address);
   if (!check.ok) return no(ADDRESS_MESSAGES[check.code], 400);
 
-  const started = startAnalysis(check.address, callerKey(req));
+  // `after` maps to the platform's waitUntil primitive. Without it, an
+  // un-awaited promise may be abandoned as soon as this handler returns,
+  // leaving an in-memory job stuck in "running". Unit tests call the handler
+  // outside a Next request scope, so they intentionally use the immediate
+  // scheduler retained by startAnalysis.
+  const schedule = process.env.NODE_ENV === "test" ? undefined : after;
+  const started = startAnalysis(check.address, callerKey(req), schedule);
   if (!started.ok) return no(started.message, 429, started.retryAfter);
 
   return NextResponse.json(publicJob(started.job), {

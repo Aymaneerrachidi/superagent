@@ -83,7 +83,19 @@ export function App() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ address: address.trim() }),
       });
-      const data = (await res.json()) as Job & { error?: string };
+      const raw = await res.text();
+      let data: Job & { error?: string };
+      try {
+        data = JSON.parse(raw) as Job & { error?: string };
+      } catch {
+        setError(
+          res.ok
+            ? "The research service returned an unreadable response."
+            : "The server ended the research request before returning a report. Try again.",
+        );
+        setBusy(false);
+        return;
+      }
       if (!res.ok) {
         setError(data.error ?? "That didn't go through.");
         setBusy(false);

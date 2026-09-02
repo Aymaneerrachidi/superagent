@@ -105,4 +105,70 @@ describe("real Superagent reply", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.detail).toContain("sources");
   });
+
+  it("normalizes a completed Robinhood Chain Markdown report", () => {
+    const mint = "0x98096d17e191b3da1d5f99a6d7b3584351b11e18";
+    const markdown = `# WHY IS BONER MOVING?
+
+**Token:** Boner Coin (BONER)
+**Chain:** Robinhood Chain
+**CA:** ${mint}
+**Snapshot:** 2026-09-02 01:52 UTC
+
+## 10-SECOND ANSWER
+
+BONER retraced after an earlier rally while liquidity remained thin.
+
+## THE STORY
+
+The token is trading on Robinhood Chain and remains highly volatile.
+
+## WHY IT MOVED
+
+- A new exchange listing increased visibility.
+- Social discussion accelerated around the same time.
+
+## SOCIAL MOMENTUM
+
+Discussion increased, but attribution remains uncertain.
+
+## WALLET ACTIVITY
+
+Several larger wallets reduced exposure into the move.
+
+## KEY NUMBERS
+
+- 24h: -9.5%
+- Liquidity: limited
+
+## RISKS
+
+- Thin liquidity can amplify both gains and losses.
+
+## BOTTOM LINE
+
+The move appears event-driven, but the retracement and liquidity make chasing risky.
+
+## SOURCES
+
+- [Robinhood Chain explorer](https://robinhoodchain.blockscout.com/address/${mint})
+- [Exchange announcement](https://example.com/listing)
+`;
+
+    const result = normalizeBase44Payload(markdown, { mint, maxBytes: 256_000 });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.report.answer).toContain("retraced");
+    expect(result.report.token).toMatchObject({ symbol: "BONER", mint, pool: "Robinhood Chain" });
+    expect(result.report.catalysts).toHaveLength(1);
+    expect(result.report.risks).toHaveLength(1);
+    expect(result.report.sources).toHaveLength(2);
+    expect(result.report.bottomLine).toContain("event-driven");
+  });
+
+  it("does not mistake ordinary Markdown narration for a completed report", () => {
+    const narration = "## Checking market data\n\nStill researching sources and wallet activity.".repeat(20);
+    const result = normalizeBase44Payload(narration, { mint: MINT, maxBytes: 256_000 });
+    expect(result.ok).toBe(false);
+  });
 });

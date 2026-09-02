@@ -46,6 +46,89 @@ function pick(o: Json, ...keys: string[]): unknown {
   return undefined;
 }
 
+/**
+ * Some Superagent configurations return a finished human-readable Markdown
+ * report instead of JSON. Recognize only the full report template (not ordinary
+ * narration) and map its named sections onto the same canonical contract.
+ */
+function markdownReport(raw: unknown, mint: string): Json | null {
+  if (typeof raw !== "string" || raw.length < 500) return null;
+  const text = raw.trim();
+  const required = [/^#\s+WHY IS .+ MOVING\?/im, /^##\s+10-SECOND ANSWER\s*$/im, /^##\s+BOTTOM LINE\s*$/im];
+  if (!required.every((pattern) => pattern.test(text))) return null;
+
+  const sections = new Map<string, string>();
+  let current = "HEADER";
+  const chunks = new Map<string, string[]>();
+  chunks.set(current, []);
+  for (const line of text.split(/\r?\n/)) {
+    const heading = /^##\s+(.+?)\s*$/.exec(line);
+    if (heading?.[1]) {
+      current = heading[1].trim().toUpperCase();
+      chunks.set(current, []);
+    } else {
+      chunks.get(current)?.push(line);
+    }
+  }
+  for (const [name, lines] of chunks) sections.set(name, lines.join("\n").trim());
+
+  const answer = sections.get("10-SECOND ANSWER") ?? "";
+  const bottomLine = sections.get("BOTTOM LINE") ?? "";
+  if (!answer || !bottomLine) return null;
+
+  const header = sections.get("HEADER") ?? "";
+  const tokenLine = /\*\*Token:\*\*\s*([^\n]+)/i.exec(header)?.[1]?.trim() ?? "";
+  const tokenMatch = /^(.*?)\s*\(([^()]+)\)\s*$/.exec(tokenLine);
+  const chain = /\*\*Chain:\*\*\s*([^\n]+)/i.exec(header)?.[1]?.trim();
+  const snapshotRaw = /\*\*Snapshot:\*\*\s*([^\n]+)/i.exec(header)?.[1]?.trim();
+  let snapshotAt: string | undefined;
+  if (snapshotRaw) {
+    const parsed = new Date(snapshotRaw.replace(/\s+UTC$/i, "Z").replace(" ", "T"));
+    if (!Number.isNaN(parsed.getTime())) snapshotAt = parsed.toISOString();
+  }
+
+  const story = [sections.get("THE STORY"), sections.get("SOCIAL MOMENTUM"), sections.get("WALLET ACTIVITY")]
+    .filter((value): value is string => Boolean(value))
+    .join("\n\n");
+  const why = sections.get("WHY IT MOVED") ?? "";
+  const riskText = sections.get("RISKS") ?? "";
+  const sourcesText = sections.get("SOURCES") ?? "";
+
+  const sources: Json[] = [];
+  const seenUrls = new Set<string>();
+  const linkPattern = /\[([^\]]+)]\((https?:\/\/[^)\s]+)\)/g;
+  for (const match of sourcesText.matchAll(linkPattern)) {
+    const title = match[1]?.trim();
+    const url = match[2]?.trim();
+    if (!title || !url || seenUrls.has(url)) continue;
+    seenUrls.add(url);
+    sources.push({ id: `s${sources.length + 1}`, title, url });
+    if (sources.length >= 60) break;
+  }
+
+  return {
+    status: "completed",
+    answer,
+    token: {
+      name: tokenMatch?.[1]?.trim() || null,
+      symbol: tokenMatch?.[2]?.trim() || null,
+      mint,
+      pool: chain || null,
+    },
+    marketSummary: sections.get("KEY NUMBERS") ?? "",
+    catalysts: why
+      ? [{ title: "Why it moved", summary: why, confidence: 0, label: "UNKNOWN", sourceIds: [] }]
+      : [],
+    narrative: story,
+    risks: riskText
+      ? [{ title: "Reported risks", severity: "unknown", detail: riskText, label: "UNKNOWN", sourceIds: [] }]
+      : [],
+    bottomLine,
+    sources,
+    ...(snapshotAt ? { snapshotAt } : {}),
+  };
+}
+
 // --- formatting for the market strip ---------------------------------------
 
 function usd(n: unknown): string | null {
@@ -283,7 +366,7 @@ export function normalizeBase44Payload(
     return { ok: false, code: "oversized_response", detail: "Upstream response exceeded the size limit" };
   }
 
-  const body = unwrap(raw);
+  const body = markdownReport(raw, opts.mint) ?? unwrap(raw);
   if (body === null || body === undefined || typeof body !== "object") {
     return { ok: false, code: "malformed_response", detail: "Upstream response was not a report object" };
   }

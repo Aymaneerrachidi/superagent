@@ -17,7 +17,7 @@ function renderInline(nodes: Inline[], keyPrefix = "i"): ReactNode {
         return <Fragment key={key}>{node.v}</Fragment>;
       case "strong":
         return (
-          <strong key={key} className="font-semibold text-ink">
+          <strong key={key} className="font-semibold text-paper">
             {renderInline(node.c, key)}
           </strong>
         );

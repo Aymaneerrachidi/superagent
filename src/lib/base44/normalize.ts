@@ -193,15 +193,27 @@ function unwrap(raw: unknown, depth = 0): unknown {
 function metricsFrom(o: Json, movement: Json): { label: string; value: string; direction: string }[] {
   const given = arr(o.metrics);
   if (given.length > 0) {
-    return given.slice(0, 8).map((raw) => {
-      const m = obj(raw);
-      const value = m.value;
-      return {
-        label: str(pick(m, "label", "name")),
-        value: typeof value === "number" ? (usd(value) ?? String(value)) : str(value),
-        direction: str(m.direction) || "flat",
-      };
+    const metrics = given
+      .map((raw) => {
+        const m = obj(raw);
+        const value = m.value;
+        return {
+          label: str(pick(m, "label", "name")),
+          value: typeof value === "number" ? (usd(value) ?? String(value)) : str(value),
+          direction: str(m.direction) || "flat",
+        };
+      })
+      // Unit price is noisy for small tokens. Market cap is easier to compare.
+      .filter((metric) => !/^\s*(token\s+)?price(?:\s+usd)?\s*$/i.test(metric.label));
+
+    const hasMarketCap = metrics.some((metric) => /^(market\s*cap|mc)$/i.test(metric.label.trim()));
+    const marketCap = usd(pick(movement, "market_cap_usd", "marketCapUsd", "market_cap", "mc_usd"));
+    if (!hasMarketCap && marketCap) metrics.splice(Math.min(3, metrics.length), 0, {
+      label: "Market cap",
+      value: marketCap,
+      direction: "flat",
     });
+    return metrics.slice(0, 8);
   }
   return derivedMetrics(movement);
 }
@@ -216,7 +228,6 @@ function derivedMetrics(movement: Json): { label: string; value: string; directi
   add("24h", pct(movement.price_change_24h_pct), dir(movement.price_change_24h_pct));
   add("6h", pct(movement.price_change_6h_pct), dir(movement.price_change_6h_pct));
   add("1h", pct(movement.price_change_1h_pct), dir(movement.price_change_1h_pct));
-  add("Price", usd(movement.price_usd), "flat");
   add("Market cap", usd(movement.market_cap_usd), "flat");
   add("Liquidity", usd(movement.liquidity_usd), "flat");
   add("Volume 24h", usd(movement.volume_24h_usd), "up");

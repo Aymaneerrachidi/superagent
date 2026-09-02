@@ -56,11 +56,29 @@ describe("real Superagent reply", () => {
     if (!result.ok) return;
     const labels = result.report.metrics.map((m) => m.label);
     expect(labels).toContain("24h");
+    expect(labels).toContain("Market cap");
     expect(labels).toContain("Liquidity");
+    expect(labels).not.toContain("Price");
     // Percentages keep their sign, money is abbreviated.
     const day = result.report.metrics.find((m) => m.label === "24h");
     expect(day?.value).toMatch(/^[+-]?\d/);
     expect(day?.direction).toBe("up");
+  });
+
+  it("replaces a supplied price metric with market cap", () => {
+    const result = parse({
+      status: "completed",
+      summary: "Market activity changed over the last 24 hours.",
+      metrics: [
+        { label: "Price", value: "$0.004", direction: "flat" },
+        { label: "24h", value: "+12%", direction: "up" },
+      ],
+      movement: { market_cap_usd: 3_324_030 },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.report.metrics.map((metric) => metric.label)).toEqual(["24h", "Market cap"]);
+    expect(result.report.metrics.find((metric) => metric.label === "Market cap")?.value).toBe("$3.32M");
   });
 
   it("keeps the mint authoritative from our own validation", () => {

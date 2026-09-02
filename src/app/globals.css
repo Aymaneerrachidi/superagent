@@ -209,6 +209,9 @@ body {
 .prose li::marker {
   color: var(--color-paper-3);
 }
+.prose-points li + li {
+  margin-top: 1rem;
+}
 .prose blockquote {
   border-left: 2px solid var(--color-line);
   padding-left: 1rem;

@@ -113,7 +113,7 @@ export function ReportView({
   const total = mix.FACT + mix.INFERENCE + mix.UNKNOWN;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {/* ---- Verdict. The serif appears here and nowhere else. ---- */}
       <section className="relative overflow-hidden rounded-2xl border border-line bg-ink-2 p-6 sm:p-8">
         <div className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -170,8 +170,7 @@ export function ReportView({
 
       {report.missingSections.length > 0 && (
         <p className="rounded-2xl border border-unknown/25 bg-unknown/[0.06] px-5 py-3 text-[0.8125rem] text-paper-2">
-          <span className="text-paper">Partial results.</span> Couldn&rsquo;t complete:{" "}
-          {report.missingSections.join(", ")}. Everything below is still source-backed.
+          <span className="text-paper">Partial report.</span> Missing: {report.missingSections.join(", ")}.
         </p>
       )}
 
@@ -206,7 +205,7 @@ export function ReportView({
       {/* ---- Catalysts. The rail encodes the evidence label. ---- */}
       {report.catalysts.length > 0 && (
         <Card title="Why it moved" aside={<span className="tnum text-[0.6875rem] text-paper-3">{report.catalysts.length}</span>}>
-          <ol className="space-y-2.5">
+          <ol className="space-y-4">
             {report.catalysts.map((c, i) => (
               <li
                 key={i}
@@ -217,6 +216,7 @@ export function ReportView({
                   aria-hidden="true"
                 />
                 <div className="mb-1.5 flex flex-wrap items-center gap-2.5">
+                  <span className="tnum text-[0.6875rem] text-paper-3">{i + 1}.</span>
                   <h3 className="text-[0.9375rem] leading-snug font-medium text-paper">{c.title}</h3>
                   <Tag label={c.label} />
                   <span
@@ -226,10 +226,8 @@ export function ReportView({
                     {Math.round(c.confidence * 100)}%
                   </span>
                 </div>
-                <p className="text-[0.875rem] leading-relaxed text-paper-2">
-                  {c.summary}
-                  <Refs ids={c.sourceIds} sources={sources} />
-                </p>
+                <SafeMarkdown className="prose prose-points text-[0.875rem]">{c.summary}</SafeMarkdown>
+                <Refs ids={c.sourceIds} sources={sources} />
               </li>
             ))}
           </ol>
@@ -246,7 +244,7 @@ export function ReportView({
       {/* ---- Risks ---- */}
       {report.risks.length > 0 && (
         <Card title="Risks" aside={<span className="tnum text-[0.6875rem] text-paper-3">{report.risks.length}</span>}>
-          <ul className="space-y-2.5">
+          <ul className="space-y-4">
             {report.risks.map((r, i) => (
               <li key={i} className="rounded-xl border border-line bg-ink-3/60 p-4">
                 <div className="mb-1.5 flex flex-wrap items-center gap-2.5">
@@ -268,10 +266,8 @@ export function ReportView({
                   <h3 className="text-[0.9375rem] font-medium text-paper">{r.title}</h3>
                   <Tag label={r.label} />
                 </div>
-                <p className="text-[0.875rem] leading-relaxed text-paper-2">
-                  {r.detail}
-                  <Refs ids={r.sourceIds} sources={sources} />
-                </p>
+                <SafeMarkdown className="prose prose-points text-[0.875rem]">{r.detail}</SafeMarkdown>
+                <Refs ids={r.sourceIds} sources={sources} />
               </li>
             ))}
           </ul>
@@ -292,7 +288,7 @@ export function ReportView({
             {sources.map((s, i) => {
               const href = safeHref(s.url);
               return (
-                <li key={i} id={`src-${i + 1}`} className="flex scroll-mt-6 gap-3 py-2.5">
+                <li key={i} id={`src-${i + 1}`} className="flex scroll-mt-6 gap-3 py-3">
                   <span className="tnum w-5 shrink-0 pt-px text-[0.6875rem] text-paper-3">{i + 1}</span>
                   <div className="min-w-0">
                     {href ? (

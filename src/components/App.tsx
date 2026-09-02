@@ -193,11 +193,11 @@ export function App() {
           <>
             {/* ---- The one thing this page does ---- */}
             <h1 className="max-w-[36rem] font-display text-[2.5rem] leading-[1.06] tracking-[-0.02em] text-paper sm:text-[3.25rem]">
-              Know why it&rsquo;s moving before you chase it.
+              See why it&rsquo;s moving.
             </h1>
             <p className="mt-4 max-w-[34rem] text-[0.9375rem] leading-relaxed text-paper-2">
-              Paste a Solana or Robinhood Chain contract address. Get the market move, the catalysts,
-              the wallets and the risks — each one labelled with how well it&rsquo;s actually evidenced.
+              Paste a Solana or Robinhood Chain contract. Get market cap, catalysts, wallet activity,
+              risks, and sources.
             </p>
 
             <form
@@ -299,8 +299,7 @@ export function App() {
           <div className="rise mt-10">
             {job.partial && (
               <p className="mb-4 rounded-xl border border-fact/30 bg-fact/[0.07] px-4 py-3 text-[0.8125rem] text-fact">
-                Partial result. The agent was still working, so this is what it had established.
-                Run it again for the full report.
+                Partial report. Run it again for the full result.
               </p>
             )}
             <ReportView
@@ -334,8 +333,7 @@ export function App() {
       </div>
 
       <footer className="relative border-t border-line py-5 text-[0.6875rem] leading-relaxed text-paper-3">
-        Research, not financial advice. Evidence comes from public sources and can be incomplete or
-        wrong. Verify before you act.
+        Research only. Verify the sources before you act.
       </footer>
     </main>
   );

@@ -63,7 +63,7 @@ export function ProgressPanel({
         ))}
       </div>
       <p className="px-5 pt-2 text-[0.75rem] text-paper-3">
-        {progress.length === 0 ? "Waiting for Base44 report" : (STAGES[stageIndex]?.label ?? "Working")}
+        {progress.length === 0 ? "Building report" : (STAGES[stageIndex]?.label ?? "Working")}
       </p>
 
       {/* The agent's own words. */}
@@ -74,7 +74,7 @@ export function ProgressPanel({
       >
         {progress.length === 0 ? (
           <li className="text-[0.8125rem] text-paper-3 italic">
-            Base44 is researching. The report will appear here when it finishes…
+            Checking market data, wallets, risks, and sources…
           </li>
         ) : (
           progress.map((p, i) => {
@@ -104,7 +104,7 @@ export function ProgressPanel({
       </ol>
 
       <p className="border-t border-line px-5 py-3 text-[0.7rem] text-paper-3">
-        You can switch tabs; keep this page open while the research request runs.
+        Keep this page open. You can switch tabs.
       </p>
     </div>
   );

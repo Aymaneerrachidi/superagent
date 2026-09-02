@@ -100,8 +100,31 @@ function unwrap(raw: unknown, depth = 0): unknown {
   return raw;
 }
 
-/** The market strip, built from whichever movement figures are present. */
-function metricsFrom(movement: Json): { label: string; value: string; direction: string }[] {
+/**
+ * The market strip.
+ *
+ * A plain `metrics` array is used as-is; otherwise the strip is derived from
+ * whichever `movement` figures are present. Both shapes occur, so both are
+ * handled rather than assuming the one the live agent happens to send today.
+ */
+function metricsFrom(o: Json, movement: Json): { label: string; value: string; direction: string }[] {
+  const given = arr(o.metrics);
+  if (given.length > 0) {
+    return given.slice(0, 8).map((raw) => {
+      const m = obj(raw);
+      const value = m.value;
+      return {
+        label: str(pick(m, "label", "name")),
+        value: typeof value === "number" ? (usd(value) ?? String(value)) : str(value),
+        direction: str(m.direction) || "flat",
+      };
+    });
+  }
+  return derivedMetrics(movement);
+}
+
+/** The strip derived from the agent's `movement` object. */
+function derivedMetrics(movement: Json): { label: string; value: string; direction: string }[] {
   const out: { label: string; value: string; direction: string }[] = [];
   const add = (label: string, value: string | null, direction: string) => {
     if (value !== null && out.length < 8) out.push({ label, value, direction });
@@ -136,9 +159,15 @@ function marketSummaryFrom(movement: Json): string {
   return parts.join(". ").replace(/\.\./g, ".");
 }
 
-/** Folds the agent's narrative object, socials, wallets and creator into prose. */
+/**
+ * Folds the narrative into prose.
+ *
+ * The agent sends a structured object plus separate social, wallet and creator
+ * sections; a simpler reply may send a plain string. Both are accepted.
+ */
 function narrativeFrom(o: Json): string {
   const parts: string[] = [];
+  if (typeof o.narrative === "string" && o.narrative.trim()) parts.push(o.narrative);
   const n = obj(o.narrative);
 
   const categories = arr(n.categories).filter((c) => typeof c === "string");
@@ -231,8 +260,11 @@ function toCanonical(body: unknown, mint: string): Json {
       mint,
       pool: pick(token, "primary_pool", "pool", "primaryPool", "dex") ?? null,
     },
-    metrics: metricsFrom(movement),
-    marketSummary: marketSummaryFrom(movement) || str(pick(movement, "summary", "detail")),
+    metrics: metricsFrom(o, movement),
+    marketSummary:
+      marketSummaryFrom(movement) ||
+      str(pick(movement, "summary", "detail")) ||
+      str(pick(o, "marketSummary", "market_summary")),
     catalysts,
     narrative: narrativeFrom(o),
     risks,

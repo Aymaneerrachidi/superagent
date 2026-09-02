@@ -121,19 +121,49 @@ function contentOf(message: Message): string {
   return "";
 }
 
-/** Assistant messages posted after our own question, oldest first. */
-function repliesAfterAnchor(conversation: unknown, anchorId: string | null, baselineCount: number) {
+/**
+ * Assistant messages that answer our question, oldest first.
+ *
+ * The conversation is capped (it holds the most recent ~200 messages and drops
+ * older ones), so message *indexes* are not stable across polls. Identity is:
+ *
+ *  1. Positional, when our own message is still present: everything after it.
+ *  2. Otherwise, any assistant message whose id was not there before we posted.
+ *
+ * An earlier version subtracted a baseline count instead, which silently
+ * scanned past the end of a capped array and found the reply never.
+ */
+function newAssistantReplies(
+  conversation: unknown,
+  anchorId: string | null,
+  idsBefore: ReadonlySet<string>,
+) {
   const messages = messagesOf(conversation);
-  let start = -1;
-  if (anchorId) start = messages.findIndex((m) => m.id === anchorId);
-  if (start < 0) start = baselineCount - 1;
+  const collect = (from: number) => {
+    const out: { id: string; text: string }[] = [];
+    for (let i = from; i < messages.length; i++) {
+      const m = messages[i];
+      if (!m || m.role !== "assistant") continue;
+      const text = contentOf(m);
+      if (text.trim()) out.push({ id: m.id ?? `i${i}`, text });
+    }
+    return out;
+  };
 
+  if (anchorId) {
+    const at = messages.findIndex((m) => m.id === anchorId);
+    if (at >= 0) return collect(at + 1);
+  }
+
+  // Our message is gone or was never identified: anything unseen is new.
   const out: { id: string; text: string }[] = [];
-  for (let i = start + 1; i < messages.length; i++) {
+  for (let i = 0; i < messages.length; i++) {
     const m = messages[i];
     if (!m || m.role !== "assistant") continue;
+    const id = m.id ?? `i${i}`;
+    if (idsBefore.has(id)) continue;
     const text = contentOf(m);
-    if (text.trim()) out.push({ id: m.id ?? `i${i}`, text });
+    if (text.trim()) out.push({ id, text });
   }
   return out;
 }
@@ -227,10 +257,13 @@ export class LiveBase44Adapter implements Base44Adapter {
 
       const convPath = `/conversations/${encodeURIComponent(conversationId)}`;
 
-      // 2. Baseline: the create response omits messages, so this needs a read.
-      let baselineCount = 0;
+      // 2. Record which messages already exist. Ids, not a count: the
+      //    conversation is capped, so counts do not survive new messages.
+      const idsBefore = new Set<string>();
       const before = await call("GET", convPath, undefined, controller.signal);
-      if (before.ok) baselineCount = messagesOf(before.data).length;
+      if (before.ok) {
+        messagesOf(before.data).forEach((m, i) => idsBefore.add(m.id ?? `i${i}`));
+      }
 
       // 3. Send the contract address, and nothing else.
       timings.requestSentAt = Date.now();
@@ -252,7 +285,7 @@ export class LiveBase44Adapter implements Base44Adapter {
         base44_conversation_id: conversationId,
         base44_message_id: anchorId,
         base44_request_sent_at: new Date(timings.requestSentAt).toISOString(),
-        baselineCount,
+        knownMessages: idsBefore.size,
       });
 
       // 4. Poll. Narration surfaces as it lands; a parseable report ends the run.
@@ -267,7 +300,7 @@ export class LiveBase44Adapter implements Base44Adapter {
           continue;
         }
 
-        for (const reply of repliesAfterAnchor(polled.data, anchorId, baselineCount)) {
+        for (const reply of newAssistantReplies(polled.data, anchorId, idsBefore)) {
           if (seen.has(reply.id)) continue;
           seen.add(reply.id);
 

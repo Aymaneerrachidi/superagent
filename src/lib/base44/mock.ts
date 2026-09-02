@@ -142,15 +142,35 @@ export class MockBase44Adapter implements Base44Adapter {
   constructor(private readonly delayMs = Number.parseInt(process.env.MOCK_DELAY_MS ?? "2600", 10)) {}
 
   async analyze(req: Base44Request): Promise<Base44Result> {
-    if (this.delayMs > 0) await new Promise((r) => setTimeout(r, this.delayMs));
+    const requestSentAt = Date.now();
+    // Narrate like the live agent so the progress UI is exercised identically.
+    const steps = [
+      "Validating the mint and selecting the primary pool.",
+      "Pulling the point-in-time market snapshot.",
+      "Researching narrative and social mentions around the move.",
+      "Checking creator history and wallet clustering.",
+      "Cross-checking each claim against its source.",
+    ];
+    for (const text of steps) {
+      if (this.delayMs > 0) await new Promise((r) => setTimeout(r, this.delayMs / steps.length));
+      req.onProgress?.({ at: Date.now(), text });
+    }
 
     const normalized = normalizeBase44Payload(payload(req.mint), {
       mint: req.mint,
       maxBytes: Number.MAX_SAFE_INTEGER,
     });
+    const timings = {
+      requestSentAt,
+      firstProgressAt: requestSentAt,
+      completedAt: Date.now(),
+      conversationId: "mock_conversation",
+      messageId: `mock_${req.jobId}`,
+      polls: 0,
+    };
     if (!normalized.ok) {
-      return { ok: false, code: normalized.code, detail: normalized.detail, retryable: false };
+      return { ok: false, code: normalized.code, detail: normalized.detail, retryable: false, timings };
     }
-    return { ok: true, report: normalized.report };
+    return { ok: true, report: normalized.report, partial: false, timings };
   }
 }

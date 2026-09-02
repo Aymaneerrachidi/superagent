@@ -41,7 +41,8 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 | --- | --- | --- |
 | `COOLDOWN_SECONDS` | `20` | Minimum gap between analyses. |
 | `MAX_ANALYSES_PER_DAY` | `50` | Hard daily ceiling on upstream calls. |
-| `CACHE_TTL_SECONDS` | `900` | Reuse a report for the same address for this long. |
+| `CACHE_TTL_SECONDS` | `300` | Reuse a report for the same address for this long. |
+| `PARTIAL_AFTER_SECONDS` | `480` | Stop waiting and show what the agent had. Not a failure. |
 | `BASE44_TIMEOUT_MS` | `0` | Wait budget in ms. `0` means no limit: wait until the agent answers. |
 | `BASE44_MAX_RETRIES` | `2` | Retries for transient failures only. |
 | `BASE44_FORCE_MOCK` | `false` | Force sample data even with credentials set. |
@@ -67,33 +68,59 @@ GET  {BASE_URL}/conversations/{id}            -> { "messages": [...] }   (polled
 - Auth is a plain `api_key: <key>` header. `Authorization: Bearer` returns 401.
 - `role` must be the literal string `"user"`.
 
-The agent narrates its progress before answering, so the adapter posts the question
-and then polls until a reply actually *parses* into a report — intermediate
-messages like "I'm validating the exact mint..." mean it is still working, not
-that the run failed.
+### What gets sent
 
-**A full run takes about 4-5 minutes** (measured: 257s end to end), but a harder
-token can take much longer. There is therefore **no timeout by default** — the
-adapter polls until the agent answers. Discarding research that has already been
-paid for, seconds before it lands, is the worst possible outcome.
+**Only the contract address.** Nothing else — no schema, no research rules, no
+formatting instructions. The Superagent already holds its own configuration, and
+restating it per request is pure added latency for work the agent was going to do
+anyway.
 
-Set `BASE44_TIMEOUT_MS` to a positive number only where the host imposes its own
-ceiling (see Deploying).
+This was a real bug. The adapter used to send 19 lines of JSON-schema
+instructions with every request, which is why the website felt slower than typing
+a CA into the Base44 chat: the chat sends one line, the website was sending a
+blueprint.
 
-Every failure carries the elapsed time, e.g. `timeout:257s`. That makes it
-self-diagnosing — a timeout at 60s means the running build is stale or the budget
-is wrong, one near the full budget means the agent genuinely ran that long. The
-server also prints its effective settings on boot:
+### What comes back
+
+The agent narrates as it works, then delivers the report:
 
 ```
-[config] adapter=live timeout=7200s cooldown=20s cache=900s
+assistant  Validating the exact mint, selecting the primary pool...
+assistant  Pulling the point-in-time market snapshot...
+   ... several more research steps ...
+assistant  ```json { "answer": ... }        <- the report
 ```
 
-The reply It is normalized in
-[`src/lib/base44/normalize.ts`](src/lib/base44/normalize.ts), which unwraps fenced
-JSON and `{data:…}` / `{result:…}` / `{output:…}` envelopes, and accepts both
-`camelCase` and `snake_case` keys. If the agent answers in prose instead of JSON,
-the run fails with `malformed_response` rather than showing an unverified report.
+Those narration lines are streamed to the browser and shown live, so you watch
+the agent think instead of staring at a spinner. The run ends when a message
+parses into a report; unparseable messages mean it is still working.
+
+**A full run takes about 4-5 minutes.** At `PARTIAL_AFTER_SECONDS` (default 8
+minutes) the app stops waiting and renders whatever the agent established,
+clearly labelled partial. Partial reports are never cached.
+
+### Latency instrumentation
+
+Every run logs a structured breakdown, so a slow analysis can be attributed to
+Base44 or to the website without guessing:
+
+```json
+{"event":"analysis_completed","ca_received_at":"...","base44_request_sent_at":"...",
+ "base44_message_id":"...","base44_completed_at":"...",
+ "queueMs":12,"base44Ms":257000,"totalMs":257012}
+```
+
+`queueMs` is time spent inside the website before the request went out;
+`base44Ms` is time spent waiting on the agent. A `website_rendered` line adds
+`website_rendered_at` and the handoff delay.
+
+### Webhook (optional)
+
+Polling every 4s already finishes every run. Setting `BASE44_WEBHOOK_SECRET` and
+pointing the Superagent Developer panel at `/api/webhooks/base44` only removes
+the few seconds between the agent finishing and the next poll noticing. The
+endpoint verifies the HMAC, rejects replayed event ids, and is strictly advisory:
+it nudges the poller, never supplies a result.
 
 Two escape hatches if your deployment differs:
 

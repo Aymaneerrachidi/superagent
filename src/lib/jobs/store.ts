@@ -17,6 +17,9 @@ import type { StageKey } from "@/lib/jobs/types";
 
 export type JobStatus = "running" | "done" | "error";
 
+/** One line of the agent narration, as it arrived. */
+export type Progress = { at: number; text: string };
+
 export type Job = {
   id: string;
   address: string;
@@ -25,6 +28,19 @@ export type Job = {
   startedAt: number;
   finishedAt: number | null;
   report: Report | null;
+  /** True when the report is what the agent had at the deadline. */
+  partial: boolean;
+  /** The agent thinking, streamed to the UI as it happens. */
+  progress: Progress[];
+  /** Latency breakdown. Epoch milliseconds. */
+  timing: {
+    caReceivedAt: number;
+    requestSentAt: number | null;
+    firstProgressAt: number | null;
+    completedAt: number | null;
+    renderedAt: number | null;
+  };
+  base44: { conversationId: string | null; messageId: string | null };
   /** Already-friendly message. Never carries provider text. */
   error: string | null;
   /** Coarse failure category, safe to show. Helps you diagnose without leaking. */
@@ -82,6 +98,16 @@ export function startAnalysis(address: string, who: string): StartResult {
       startedAt: Date.now(),
       finishedAt: Date.now(),
       report: hit.report,
+      partial: false,
+      progress: [],
+      timing: {
+        caReceivedAt: Date.now(),
+        requestSentAt: null,
+        firstProgressAt: null,
+        completedAt: Date.now(),
+        renderedAt: null,
+      },
+      base44: { conversationId: null, messageId: null },
       error: null,
       errorCode: null,
       cached: true,
@@ -127,6 +153,16 @@ export function startAnalysis(address: string, who: string): StartResult {
     startedAt: now,
     finishedAt: null,
     report: null,
+    partial: false,
+    progress: [],
+    timing: {
+      caReceivedAt: now,
+      requestSentAt: null,
+      firstProgressAt: null,
+      completedAt: null,
+      renderedAt: null,
+    },
+    base44: { conversationId: null, messageId: null },
     error: null,
     errorCode: null,
     cached: false,
@@ -141,61 +177,75 @@ export function getJob(id: string): Job | null {
   return jobs.get(id) ?? null;
 }
 
-/** Advances the visible stage while the single upstream call is in flight. */
-function scheduleStages(job: Job): NodeJS.Timeout[] {
-  const plan: [StageKey, number][] = [
-    ["checking_market", 1_200],
-    ["researching_narrative", 4_000],
-    ["checking_wallets", 9_000],
-    ["verifying_evidence", 15_000],
+/** Maps how far the agent has narrated onto the visible stage list. */
+function stageForProgress(count: number): StageKey {
+  const order: StageKey[] = [
+    "verifying_token",
+    "checking_market",
+    "researching_narrative",
+    "checking_wallets",
+    "verifying_evidence",
+    "building_report",
   ];
-  return plan.map(([stage, delay]) =>
-    setTimeout(() => {
-      if (job.status === "running") job.stage = stage;
-    }, delay),
-  );
+  return order[Math.min(count, order.length - 1)] as StageKey;
 }
 
 async function run(job: Job): Promise<void> {
-  const timers = scheduleStages(job);
   const controller = new AbortController();
-  // No wall clock on a running analysis. The adapter polls until the agent
-  // answers; nothing here cuts that short.
-  const timeout = env.base44TimeoutMs > 0 ? setTimeout(() => controller.abort(), env.base44TimeoutMs) : null;
+  // Stop waiting at the partial deadline and show what the agent established,
+  // rather than discarding a run that may be nearly done.
+  const partialAt =
+    env.partialAfterSeconds > 0
+      ? setTimeout(() => controller.abort(), env.partialAfterSeconds * 1000)
+      : null;
 
   try {
     const result = await getBase44Adapter().analyze({
       mint: job.address,
       jobId: job.id,
       signal: controller.signal,
+      hasActivity: (conversationId, since) => consumeConversationActivity(conversationId, since),
+      onProgress: (event) => {
+        job.progress.push(event);
+        job.timing.firstProgressAt ??= event.at;
+        job.stage = stageForProgress(job.progress.length);
+        log.info("base44_progress", {
+          jobId: job.id,
+          n: job.progress.length,
+          elapsedSeconds: Math.round((event.at - job.timing.caReceivedAt) / 1000),
+        });
+      },
     });
 
+    job.base44 = {
+      conversationId: result.timings?.conversationId ?? null,
+      messageId: result.timings?.messageId ?? null,
+    };
+    job.timing.requestSentAt = result.timings?.requestSentAt ?? null;
+
     if (!result.ok) {
-      // The provider's own words never reach the browser.
       const waited = Math.round((Date.now() - job.startedAt) / 1000);
       log.warn("analysis_failed", {
+        jobId: job.id,
         code: result.code,
         detail: result.detail,
         status: result.httpStatus,
         waitedSeconds: waited,
       });
       job.status = "error";
-      // The elapsed time makes a failure self-diagnosing: one at 60s points at a
-      // stale build or a wrong budget, one at the full budget means the agent
-      // really did run that long.
       job.errorCode = `${result.code}:${waited}s`;
       job.error =
         result.code === "timeout"
           ? `Research ran ${Math.floor(waited / 60)}m ${waited % 60}s without finishing. Try again.`
           : result.code === "not_configured"
-            ? "The research service isn't connected yet."
+            ? "The research service is not connected yet."
             : result.code === "auth_failed"
               ? "The research service rejected our credentials."
               : result.code === "malformed_response"
                 ? "The research service replied in an unexpected format."
                 : result.code === "oversized_response"
                   ? "The research service returned too much data."
-                  : "Couldn't finish that analysis. Try again shortly.";
+                  : "Could not finish that analysis. Try again shortly.";
       return;
     }
 
@@ -205,32 +255,92 @@ async function run(job: Job): Promise<void> {
 
     job.stage = "building_report";
     job.report = report;
+    job.partial = result.partial;
     job.snapshotAt = snapshotAt;
+    job.timing.completedAt = result.timings?.completedAt ?? Date.now();
     job.status = "done";
-    cache.set(job.address, { report, snapshotAt, at: Date.now() });
+
+    // A partial report is never cached: it would serve an unfinished answer to
+    // everyone else for the whole cache window.
+    if (!result.partial) cache.set(job.address, { report, snapshotAt, at: Date.now() });
+
+    const t = job.timing;
+    log.info("analysis_completed", {
+      jobId: job.id,
+      partial: result.partial,
+      ca_received_at: new Date(t.caReceivedAt).toISOString(),
+      base44_request_sent_at: t.requestSentAt ? new Date(t.requestSentAt).toISOString() : null,
+      base44_message_id: job.base44.messageId,
+      base44_completed_at: t.completedAt ? new Date(t.completedAt).toISOString() : null,
+      // Where the time actually went.
+      queueMs: t.requestSentAt ? t.requestSentAt - t.caReceivedAt : null,
+      base44Ms: t.requestSentAt && t.completedAt ? t.completedAt - t.requestSentAt : null,
+      totalMs: t.completedAt ? t.completedAt - t.caReceivedAt : null,
+      progressEvents: job.progress.length,
+    });
   } catch (err) {
-    log.error("analysis_crashed", { error: log.redactError(err) });
+    log.error("analysis_crashed", { jobId: job.id, error: log.redactError(err) });
     job.status = "error";
     job.errorCode = "internal_error";
     job.error = "Something went wrong on our side.";
   } finally {
-    if (timeout) clearTimeout(timeout);
-    for (const t of timers) clearTimeout(t);
+    if (partialAt) clearTimeout(partialAt);
     job.finishedAt = Date.now();
   }
 }
 
 /** Shape sent to the browser. Deliberately excludes internal fields. */
 export function publicJob(job: Job) {
+  // Stamped on the first read of a finished job: the moment the browser could
+  // render it, which closes the latency picture.
+  if (job.status === "done" && job.timing.renderedAt === null) {
+    job.timing.renderedAt = Date.now();
+    log.info("website_rendered", {
+      jobId: job.id,
+      website_rendered_at: new Date(job.timing.renderedAt).toISOString(),
+      handoffMs: job.timing.completedAt ? job.timing.renderedAt - job.timing.completedAt : null,
+      totalMs: job.timing.renderedAt - job.timing.caReceivedAt,
+    });
+  }
+
   return {
     id: job.id,
     status: job.status,
     stage: job.stage,
     address: job.address,
     cached: job.cached,
+    partial: job.partial,
     snapshotAt: job.snapshotAt,
     report: job.report,
     error: job.error,
     errorCode: job.errorCode,
+    progress: job.progress,
+    // Surfaced so the wait is never an opaque spinner.
+    timing: {
+      caReceivedAt: job.timing.caReceivedAt,
+      requestSentAt: job.timing.requestSentAt,
+      completedAt: job.timing.completedAt,
+      elapsedMs: (job.timing.completedAt ?? Date.now()) - job.timing.caReceivedAt,
+    },
   };
+}
+
+/**
+ * Webhook hint: this conversation has new activity.
+ *
+ * Recorded so a waiting poll can check straight away instead of sleeping out
+ * its interval. Deliberately advisory — the poller is correct on its own, and
+ * the webhook is an optional latency optimisation, never a source of truth.
+ */
+const conversationActivity = new Map<string, number>();
+
+export function noteConversationActivity(conversationId: string): void {
+  conversationActivity.set(conversationId, Date.now());
+}
+
+export function consumeConversationActivity(conversationId: string, since: number): boolean {
+  const at = conversationActivity.get(conversationId);
+  if (at === undefined || at <= since) return false;
+  conversationActivity.delete(conversationId);
+  return true;
 }

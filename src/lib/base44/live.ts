@@ -1,20 +1,22 @@
 /**
  * The only module that talks to Base44.
  *
- * Superagents are conversational, so this adapter:
- *
  *   POST {base}/conversations                 -> conversation id
- *   POST {base}/conversations/{id}/messages   -> post the question, keep its id
- *   GET  {base}/conversations/{id}   (polled)  -> read the reply that follows it
+ *   POST {base}/conversations/{id}/messages   -> the CA, and nothing else
+ *   GET  {base}/conversations/{id}   (polled)  -> narration, then the report
  *
- * Two properties of the live API drive the design here:
+ * Two properties of the live API drive the design:
  *
- *  - The API returns ONE persistent conversation per key. It is shared and it
- *    grows without bound, so the reply is located by its position after our own
- *    message rather than by "newest assistant message" — otherwise a second
- *    person analysing at the same time could be handed our answer, or we theirs.
- *  - That conversation payload is already megabytes. Size limits therefore apply
- *    to the extracted report, never to the transport envelope.
+ *  - The key maps to ONE permanent conversation. It cannot be created, cleared
+ *    or deleted (every such route 404s), and it is shared, so the reply is
+ *    located by its position after our own message rather than by "newest
+ *    assistant message".
+ *  - That conversation is already megabytes. Size limits therefore apply to the
+ *    extracted report, never to the transport envelope.
+ *
+ * The message sent is the validated mint and nothing more. The Superagent is
+ * already configured with its research rules and output format; restating them
+ * on every request only adds work, and therefore latency.
  *
  * The API key is read here and nowhere else, on the server only.
  */
@@ -23,21 +25,40 @@ import { env } from "@/lib/env";
 import { log } from "@/lib/security/logger";
 import { redact } from "@/lib/security/redact";
 import { normalizeBase44Payload } from "@/lib/base44/normalize";
-import type { Base44Adapter, Base44Request, Base44Result, Base44FailureCode } from "@/lib/base44/types";
+import { reportSchema, computeMissingSections } from "@/lib/report/schema";
+import type {
+  Base44Adapter,
+  Base44Request,
+  Base44Result,
+  Base44FailureCode,
+  Base44Timings,
+} from "@/lib/base44/types";
 
-/**
- * Ceiling on a conversation payload. Generous: it holds the entire history, not
- * a report, and exists only to stop an unbounded response exhausting memory.
- */
+/** Backstop against an unbounded response, not a report size limit. */
 const MAX_CONVERSATION_BYTES = 64 * 1024 * 1024;
+
+/** Poll cadence. Each response carries the whole conversation, so unhurried. */
+const POLL_MS = 4_000;
+
+function emptyTimings(): Base44Timings {
+  return {
+    requestSentAt: null,
+    firstProgressAt: null,
+    completedAt: null,
+    conversationId: null,
+    messageId: null,
+    polls: 0,
+  };
+}
 
 function fail(
   code: Base44FailureCode,
   detail: string,
   retryable: boolean,
+  timings: Base44Timings,
   httpStatus?: number,
 ): Base44Result {
-  return { ok: false, code, detail: redact(detail), retryable, ...(httpStatus ? { httpStatus } : {}) };
+  return { ok: false, code, detail: redact(detail), retryable, timings, ...(httpStatus ? { httpStatus } : {}) };
 }
 
 /** Base44 authenticates with a plain `api_key` header. */
@@ -49,35 +70,8 @@ function authHeaders(): Record<string, string> {
 
 const base = () => env.base44BaseUrl.replace(/\/+$/, "");
 
-/**
- * The question put to the Superagent.
- *
- * The mint is already validated as a 32-byte Base58 key, so interpolating it
- * cannot inject instructions.
- */
-function buildPrompt(mint: string): string {
-  return [
-    `Analyze the Solana token with contract address ${mint}.`,
-    "",
-    "Reply with ONLY a JSON object inside a ```json code fence, with these keys:",
-    '- "answer": one paragraph explaining why it is moving',
-    '- "token": { "name", "symbol", "pool" }',
-    '- "metrics": [{ "label", "value", "direction": "up"|"down"|"flat" }]',
-    '- "marketSummary": string',
-    '- "catalysts": [{ "title", "summary", "confidence": 0-1, "label": "FACT"|"INFERENCE"|"UNKNOWN", "sourceIds": [] }]',
-    '- "narrative": string covering socials, creator and wallet activity',
-    '- "risks": [{ "title", "severity": "low"|"medium"|"high"|"critical"|"unknown", "detail", "label", "sourceIds": [] }]',
-    '- "bottomLine": string',
-    '- "sources": [{ "id": "s1", "title", "url", "publisher" }]',
-    "",
-    "Label every claim FACT (verified against a source), INFERENCE (reasoned) or",
-    "UNKNOWN (could not establish). Cite sources by id. Do not invent sources.",
-  ].join("\n");
-}
-
 type Json = Record<string, unknown>;
 type Message = { id?: string; role?: string; content?: unknown };
-
 type CallResult = { ok: true; data: unknown } | { ok: false; status: number; text: string };
 
 async function call(
@@ -111,7 +105,7 @@ function messagesOf(conversation: unknown): Message[] {
   return c && Array.isArray(c.messages) ? (c.messages as Message[]) : [];
 }
 
-/** Message content arrives as a string, or as parts carrying `text`. */
+/** Content arrives as a string, or as parts carrying `text`. */
 function contentOf(message: Message): string {
   const c = message.content;
   if (typeof c === "string") return c;
@@ -127,152 +121,193 @@ function contentOf(message: Message): string {
   return "";
 }
 
-/**
- * Assistant messages posted after our own question, oldest first.
- *
- * The agent narrates its progress ("I'm validating the exact mint...") before
- * delivering the report, so there is no single "the reply" message. The caller
- * tries each candidate and keeps waiting until one parses.
- */
-function repliesAfterAnchor(
-  conversation: unknown,
-  anchorId: string | null,
-  baselineCount: number,
-): string[] {
+/** Assistant messages posted after our own question, oldest first. */
+function repliesAfterAnchor(conversation: unknown, anchorId: string | null, baselineCount: number) {
   const messages = messagesOf(conversation);
-
   let start = -1;
   if (anchorId) start = messages.findIndex((m) => m.id === anchorId);
-  // Without an anchor, anything beyond the pre-existing count is new.
   if (start < 0) start = baselineCount - 1;
 
-  const out: string[] = [];
+  const out: { id: string; text: string }[] = [];
   for (let i = start + 1; i < messages.length; i++) {
     const m = messages[i];
     if (!m || m.role !== "assistant") continue;
-    const content = contentOf(m);
-    if (content.trim()) out.push(content);
+    const text = contentOf(m);
+    if (text.trim()) out.push({ id: m.id ?? `i${i}`, text });
   }
   return out;
 }
 
+/**
+ * Builds a readable report out of the agent's narration.
+ *
+ * Used when the deadline arrives before a structured report: what the agent
+ * actually established beats nothing, provided it is clearly marked partial.
+ */
+function partialReportFrom(progress: string[], mint: string) {
+  const parsed = reportSchema.safeParse({
+    answer: progress[progress.length - 1] ?? "",
+    token: { mint },
+    narrative: progress.join("\n\n").slice(0, 2500),
+  });
+  if (!parsed.success) return null;
+  const report = parsed.data;
+  report.missingSections = computeMissingSections(report);
+  return report;
+}
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Sleeps up to `ms`, returning early if the webhook reports activity. Checked
+ * on a short tick so a webhook cuts the wait without needing a real event bus.
+ */
+async function waitForChange(
+  ms: number,
+  conversationId: string,
+  since: number,
+  hasActivity: ((id: string, since: number) => boolean) | undefined,
+): Promise<void> {
+  if (!hasActivity) {
+    await sleep(ms);
+    return;
+  }
+  const step = 400;
+  for (let waited = 0; waited < ms; waited += step) {
+    await sleep(Math.min(step, ms - waited));
+    if (hasActivity(conversationId, since)) return;
+  }
+}
 
 export class LiveBase44Adapter implements Base44Adapter {
   readonly mode = "live" as const;
 
   async analyze(req: Base44Request): Promise<Base44Result> {
+    const timings = emptyTimings();
     if (!env.base44BaseUrl || !env.base44ApiKey) {
-      return fail("not_configured", "Base44 credentials are not configured", false);
+      return fail("not_configured", "Base44 credentials are not configured", false, timings);
     }
 
     const controller = new AbortController();
     const onAbort = () => controller.abort();
     req.signal?.addEventListener("abort", onAbort, { once: true });
 
-    // A budget of 0 means no limit: keep polling until the agent answers or the
-    // caller cancels. Only a positive budget arms a deadline.
+    // A budget of 0 means no hard stop here; the caller decides when to stop.
     const budgetMs = env.base44TimeoutMs;
     const deadline = budgetMs > 0 ? Date.now() + budgetMs : Number.POSITIVE_INFINITY;
     const timer = budgetMs > 0 ? setTimeout(() => controller.abort(), budgetMs) : null;
 
+    const seen = new Set<string>();
+    const progress: string[] = [];
+
+    const salvage = (): Base44Result | null => {
+      if (progress.length === 0) return null;
+      const partial = partialReportFrom(progress, req.mint);
+      if (!partial) return null;
+      timings.completedAt = Date.now();
+      return { ok: true, report: partial, partial: true, timings };
+    };
+
     try {
-      // 1. Get the conversation. The API returns the existing one for this key.
-      const created = await call("POST", "/conversations", { metadata: { job_id: req.jobId } }, controller.signal);
+      // 1. The conversation. The API returns the existing one for this key.
+      const created = await call("POST", "/conversations", undefined, controller.signal);
       if (!created.ok) {
         log.warn("base44_http_error", { step: "conversation", status: created.status, body: created.text });
         if (created.status === 401 || created.status === 403) {
-          return fail("auth_failed", `Upstream rejected credentials (${created.status})`, false, created.status);
+          return fail("auth_failed", `Upstream rejected credentials (${created.status})`, false, timings, created.status);
         }
-        return fail("upstream_error", `Conversation request returned ${created.status}`, false, created.status);
+        return fail("upstream_error", `Conversation request returned ${created.status}`, false, timings, created.status);
       }
 
-      const conversationId = typeof (created.data as Json)?.id === "string" ? ((created.data as Json).id as string) : null;
-      if (!conversationId) return fail("malformed_response", "No conversation id returned", false);
+      const conversationId =
+        typeof (created.data as Json)?.id === "string" ? ((created.data as Json).id as string) : null;
+      if (!conversationId) return fail("malformed_response", "No conversation id returned", false, timings);
+      timings.conversationId = conversationId;
 
       const convPath = `/conversations/${encodeURIComponent(conversationId)}`;
 
-      // 2. Record how much history already exists. The create response omits
-      //    messages, so this needs its own read.
+      // 2. Baseline: the create response omits messages, so this needs a read.
       let baselineCount = 0;
       const before = await call("GET", convPath, undefined, controller.signal);
       if (before.ok) baselineCount = messagesOf(before.data).length;
 
-      // 3. Post the question and keep the id of our own message.
+      // 3. Send the contract address, and nothing else.
+      timings.requestSentAt = Date.now();
       const sent = await call(
         "POST",
         `${convPath}${env.base44MessagePath}`,
-        { role: "user", content: buildPrompt(req.mint) },
+        { role: "user", content: req.mint },
         controller.signal,
       );
       if (!sent.ok) {
         log.warn("base44_http_error", { step: "add_message", status: sent.status, body: sent.text });
-        return fail("upstream_error", `Add message returned ${sent.status}`, false, sent.status);
+        return fail("upstream_error", `Add message returned ${sent.status}`, false, timings, sent.status);
       }
       const anchorId = typeof (sent.data as Json)?.id === "string" ? ((sent.data as Json).id as string) : null;
-      log.info("base44_question_sent", { jobId: req.jobId, anchored: anchorId !== null, baselineCount });
+      timings.messageId = anchorId;
 
-      // 4. Poll until a reply parses into a report.
-      //
-      //    Intermediate progress messages are expected and are not failures:
-      //    an unparseable message means the agent is still working, so polling
-      //    continues. Only at the deadline, having seen assistant output that
-      //    never became a report, is that reported as a malformed reply.
-      const startedAt = Date.now();
-      const secs = () => Math.round((Date.now() - startedAt) / 1000);
-      let delay = 3_000;
-      let polls = 0;
-      let sawContent = false;
-      let lastPreview = "";
+      log.info("base44_request_sent", {
+        jobId: req.jobId,
+        base44_conversation_id: conversationId,
+        base44_message_id: anchorId,
+        base44_request_sent_at: new Date(timings.requestSentAt).toISOString(),
+        baselineCount,
+      });
 
+      // 4. Poll. Narration surfaces as it lands; a parseable report ends the run.
       while (Date.now() < deadline && !controller.signal.aborted) {
-        await sleep(delay);
-        delay = Math.min(15_000, Math.round(delay * 1.25));
-        polls += 1;
+        const sleptFrom = Date.now();
+        await waitForChange(POLL_MS, conversationId, sleptFrom, req.hasActivity);
+        timings.polls += 1;
 
         const polled = await call("GET", convPath, undefined, controller.signal);
         if (!polled.ok) {
-          log.warn("base44_poll_error", { status: polled.status, elapsedSeconds: secs() });
+          log.warn("base44_poll_error", { status: polled.status });
           continue;
         }
 
-        const candidates = repliesAfterAnchor(polled.data, anchorId, baselineCount);
-        // Newest first: the report is the last thing the agent says.
-        for (const content of [...candidates].reverse()) {
-          sawContent = true;
-          lastPreview = content.slice(0, 200);
-          const normalized = normalizeBase44Payload(content, {
+        for (const reply of repliesAfterAnchor(polled.data, anchorId, baselineCount)) {
+          if (seen.has(reply.id)) continue;
+          seen.add(reply.id);
+
+          const normalized = normalizeBase44Payload(reply.text, {
             mint: req.mint,
             maxBytes: env.base44MaxReportBytes,
           });
           if (normalized.ok) {
-            log.info("base44_report_received", { jobId: req.jobId, elapsedSeconds: secs(), polls });
-            return { ok: true, report: normalized.report };
+            timings.completedAt = Date.now();
+            log.info("base44_completed", {
+              jobId: req.jobId,
+              base44_message_id: anchorId,
+              base44_completed_at: new Date(timings.completedAt).toISOString(),
+              durationSeconds: Math.round((timings.completedAt - (timings.requestSentAt ?? 0)) / 1000),
+              polls: timings.polls,
+              progressEvents: progress.length,
+            });
+            return { ok: true, report: normalized.report, partial: false, timings };
           }
-        }
 
-        // Every tenth poll, record that we are still waiting. Without this a
-        // long run is indistinguishable from a hung one in the log.
-        if (polls % 10 === 0) {
-          log.info("base44_waiting", { jobId: req.jobId, elapsedSeconds: secs(), polls, sawContent });
+          // Not a report: the agent is narrating its work.
+          timings.firstProgressAt ??= Date.now();
+          progress.push(reply.text);
+          req.onProgress?.({ at: Date.now(), text: reply.text });
         }
       }
 
-      if (sawContent) {
-        log.warn("base44_never_parsed", { jobId: req.jobId, elapsedSeconds: secs(), preview: lastPreview });
-        return fail(
-          "malformed_response",
-          `The agent replied but never produced a parseable report (waited ${secs()}s)`,
-          false,
-        );
+      // 5. Deadline reached. Return what the agent did establish.
+      const partial = salvage();
+      if (partial) {
+        log.warn("base44_partial", { jobId: req.jobId, progressEvents: progress.length, polls: timings.polls });
+        return partial;
       }
-      log.warn("base44_timeout", { jobId: req.jobId, elapsedSeconds: secs(), polls, budgetMs });
-      return fail("timeout", `Cancelled after ${secs()}s over ${polls} polls`, false);
+
+      log.warn("base44_timeout", { jobId: req.jobId, polls: timings.polls, budgetMs });
+      return fail("timeout", `No reply after ${timings.polls} polls`, false, timings);
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
-        return fail("timeout", "Upstream did not respond in time", false);
+        return salvage() ?? fail("timeout", "Cancelled before a reply arrived", false, timings);
       }
-      return fail("upstream_error", `Upstream request failed: ${log.redactError(err)}`, true);
+      return fail("upstream_error", `Upstream request failed: ${log.redactError(err)}`, true, timings);
     } finally {
       if (timer) clearTimeout(timer);
       req.signal?.removeEventListener("abort", onAbort);

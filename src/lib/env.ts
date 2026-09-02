@@ -54,6 +54,10 @@ export const env = {
    * Path appended to /conversations/{id} to post a message. Configurable
    * because the exact segment is not in Base44's public docs.
    */
+  /** Optional. Enables the message.completed webhook when set. */
+  get base44WebhookSecret() {
+    return str("BASE44_WEBHOOK_SECRET");
+  },
   get base44MessagePath() {
     const p = str("BASE44_MESSAGE_PATH", "/messages");
     return p.startsWith("/") ? p : `/${p}`;
@@ -92,7 +96,14 @@ export const env = {
   },
   /** Reuse a completed report for the same address for this long. */
   get cacheTtlSeconds() {
-    return int("CACHE_TTL_SECONDS", 900);
+    return int("CACHE_TTL_SECONDS", 300);
+  },
+  /**
+   * When to stop waiting and show whatever the agent established. Not a
+   * failure: the partial output is rendered and labelled as such.
+   */
+  get partialAfterSeconds() {
+    return int("PARTIAL_AFTER_SECONDS", 480);
   },
 } as const;
 

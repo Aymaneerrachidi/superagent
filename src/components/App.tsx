@@ -4,8 +4,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Report } from "@/lib/report/schema";
 import { validateSolanaAddress, MAX_INPUT_LENGTH, ADDRESS_MESSAGES } from "@/lib/solana/address";
-import { STAGES } from "@/lib/jobs/types";
 import { ReportView } from "@/components/Report";
+import { ProgressPanel, type Progress } from "@/components/Progress";
 
 const EXAMPLE = "EEpng77ZPn9FbgbT4xsRjwuxNCcMBYq3HTwEscyTpump";
 const cx = (...p: (string | false | null | undefined)[]) => p.filter(Boolean).join(" ");
@@ -21,6 +21,9 @@ type Job = {
   report: Report | null;
   error: string | null;
   errorCode: string | null;
+  partial: boolean;
+  progress: Progress[];
+  timing: { caReceivedAt: number; requestSentAt: number | null; completedAt: number | null; elapsedMs: number };
 };
 
 export function App() {
@@ -82,7 +85,7 @@ export function App() {
         setBusy(false);
         return;
       }
-      pollRef.current = setTimeout(() => void poll(id, attempt + 1), attempt < 4 ? 900 : attempt < 30 ? 2500 : 5000);
+      pollRef.current = setTimeout(() => void poll(id, attempt + 1), attempt < 3 ? 900 : 3000);
     } catch {
       // A network blip must not end a run the server is still working on.
       // Back off and keep asking; the job outlives any single failed poll.
@@ -150,7 +153,6 @@ export function App() {
     setTimeout(() => setCopied(false), 1800);
   }
 
-  const stageIndex = job ? STAGES.findIndex((s) => s.key === job.stage) : 0;
   // With nothing to show yet, the input is the whole page, so it sits centred
   // rather than stranded under a band of empty space.
   const idle = !job && !busy;
@@ -294,57 +296,27 @@ export function App() {
           </>
         )}
 
-        {/* ---- Progress ---- */}
+        {/* ---- Progress: the agent thinking out loud ---- */}
         {busy && job?.status === "running" && (
-          <div className="rise mt-10 rounded-2xl border border-line bg-ink-2 p-5 sm:p-6">
-            <div className="mb-4 flex items-center justify-between gap-4 border-b border-line pb-3">
-              <span className="eyebrow">Researching</span>
-              <span className="tnum text-[0.6875rem] text-paper-3">
-                {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, "0")}
-              </span>
-            </div>
-            <ol className="space-y-0" aria-live="polite">
-              {STAGES.map((stage, i) => {
-                const done = i < stageIndex;
-                const active = i === stageIndex;
-                return (
-                  <li key={stage.key} className="flex items-center gap-3 py-2">
-                    <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden="true">
-                      {done ? (
-                        <svg viewBox="0 0 16 16" className="size-3.5 text-fact" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="m3.5 8.5 3 3 6-7" />
-                        </svg>
-                      ) : active ? (
-                        <span className="breathe size-1.5 rounded-full bg-fact" />
-                      ) : (
-                        <span className="size-1.5 rounded-full bg-line" />
-                      )}
-                    </span>
-                    <span
-                      className={cx(
-                        "text-[0.875rem]",
-                        done && "text-paper-2",
-                        active && "text-paper",
-                        !done && !active && "text-paper-3",
-                      )}
-                    >
-                      {stage.label}
-                    </span>
-                    {active && <span className="scan relative ml-2 h-px flex-1 overflow-hidden bg-line" />}
-                  </li>
-                );
-              })}
-            </ol>
-            <p className="mt-4 border-t border-line pt-4 text-[0.75rem] text-paper-3">
-              Deep research takes a few minutes. This keeps running if you switch tabs, and
-              there is no time limit — it waits until the agent is done.
-            </p>
+          <div className="mt-10">
+            <ProgressPanel
+              progress={job.progress ?? []}
+              stage={job.stage}
+              elapsed={elapsed}
+              startedAt={job.timing?.caReceivedAt ?? null}
+            />
           </div>
         )}
 
         {/* ---- Report ---- */}
         {job?.status === "done" && job.report && (
           <div className="rise mt-10">
+            {job.partial && (
+              <p className="mb-4 rounded-xl border border-fact/30 bg-fact/[0.07] px-4 py-3 text-[0.8125rem] text-fact">
+                Partial result. The agent was still working, so this is what it had established.
+                Run it again for the full report.
+              </p>
+            )}
             <ReportView
               report={job.report}
               snapshotAt={job.snapshotAt}

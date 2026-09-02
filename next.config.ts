@@ -7,6 +7,8 @@ import type { NextConfig } from "next";
  * third-party script. Report content renders as React elements rather than an
  * HTML string, so upstream markup cannot execute even if the CSP were bypassed.
  */
+const isDev = process.env.NODE_ENV !== "production";
+
 const csp = [
   "default-src 'self'",
   "base-uri 'self'",
@@ -15,11 +17,12 @@ const csp = [
   "form-action 'self'",
   "img-src 'self' data:",
   "font-src 'self'",
-  // Next injects a small amount of inline bootstrap CSS/JS; nonce-less inline
-  // styles are permitted, scripts are restricted to self + Turnstile.
   "style-src 'self' 'unsafe-inline'",
-  "script-src 'self' 'unsafe-inline'",
-  "connect-src 'self'",
+  // React's development build uses eval() for its debugging tooling. It never
+  // does in production, so the allowance is scoped to dev only.
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
+  // The dev server talks to itself over a websocket for hot reload.
+  `connect-src 'self'${isDev ? " ws: wss:" : ""}`,
   "frame-src 'none'",
   "upgrade-insecure-requests",
 ].join("; ");

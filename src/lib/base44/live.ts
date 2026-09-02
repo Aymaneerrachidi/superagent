@@ -300,7 +300,20 @@ export class LiveBase44Adapter implements Base44Adapter {
           continue;
         }
 
-        for (const reply of newAssistantReplies(polled.data, anchorId, idsBefore)) {
+        const replies = newAssistantReplies(polled.data, anchorId, idsBefore);
+        // One line per poll, so a stuck run says why instead of just sitting
+        // there: how many messages exist, whether our own was found, and how
+        // many replies were considered new.
+        log.info("base44_poll", {
+          jobId: req.jobId,
+          poll: timings.polls,
+          messages: messagesOf(polled.data).length,
+          anchorFound: anchorId ? messagesOf(polled.data).some((m) => m.id === anchorId) : false,
+          newReplies: replies.length,
+          unseen: replies.filter((r) => !seen.has(r.id)).length,
+        });
+
+        for (const reply of replies) {
           if (seen.has(reply.id)) continue;
           seen.add(reply.id);
 

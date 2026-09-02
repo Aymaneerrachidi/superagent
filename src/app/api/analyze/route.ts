@@ -6,7 +6,7 @@
  */
 import { NextResponse } from "next/server";
 import { hasAccess } from "@/lib/access";
-import { validateSolanaAddress, ADDRESS_MESSAGES, MAX_INPUT_LENGTH } from "@/lib/solana/address";
+import { validateContractAddress, ADDRESS_MESSAGES, MAX_INPUT_LENGTH } from "@/lib/solana/address";
 import { startAnalysisAndWait, publicJob } from "@/lib/jobs/store";
 import { ACCESS_COOKIE } from "@/lib/access";
 
@@ -44,7 +44,7 @@ export async function POST(req: Request) {
   }
   if (address.length > MAX_INPUT_LENGTH * 4) return no(ADDRESS_MESSAGES.too_long, 400);
 
-  const check = validateSolanaAddress(address);
+  const check = validateContractAddress(address);
   if (!check.ok) return no(ADDRESS_MESSAGES[check.code], 400);
 
   const started = await startAnalysisAndWait(check.address, callerKey(req));

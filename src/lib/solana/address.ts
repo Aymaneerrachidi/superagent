@@ -1,9 +1,10 @@
 /**
- * Solana address validation.
+ * Contract address validation for Solana and Robinhood Chain.
  *
- * Strict, allow-list based: the input must be exactly one Base58 string that
- * decodes to 32 bytes. URLs, prompt text, multiple addresses and any other
- * chain's address format are rejected before anything expensive happens.
+ * Strict, allow-list based: the input must be either one 32-byte Solana Base58
+ * address or one standard 20-byte EVM address used by Robinhood Chain. URLs,
+ * prompt text, multiple addresses and other formats are rejected before
+ * anything expensive happens.
  */
 
 const BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -49,14 +50,14 @@ export function decodeBase58(input: string): Uint8Array | null {
   return Uint8Array.from(bytes.reverse());
 }
 
-/** Ethereum/BSC-style hex address, so the user gets an accurate message. */
+/** Robinhood Chain is EVM-compatible and uses standard 20-byte hex addresses. */
 const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 /** Bitcoin bech32 and Tron prefixes, both of which are frequently pasted by mistake. */
 const OTHER_CHAIN = /^(bc1[0-9a-z]{20,}|T[1-9A-HJ-NP-Za-km-z]{33}|(cosmos|osmo|inj)1[0-9a-z]{20,})$/;
 
 const PROMPT_TEXT = /(ignore|disregard|instruction|system prompt|you are|assistant|pretend|jailbreak|\bprompt\b|<\/?[a-z]|```)/i;
 
-export function validateSolanaAddress(rawInput: string): AddressValidation {
+export function validateContractAddress(rawInput: string): AddressValidation {
   const input = String(rawInput ?? "").trim();
 
   if (input.length === 0) return { ok: false, code: "empty" };
@@ -81,7 +82,8 @@ export function validateSolanaAddress(rawInput: string): AddressValidation {
     }
     return { ok: false, code: "invalid_base58" };
   }
-  if (EVM_ADDRESS.test(input) || OTHER_CHAIN.test(input)) {
+  if (EVM_ADDRESS.test(input)) return { ok: true, address: input };
+  if (OTHER_CHAIN.test(input)) {
     return { ok: false, code: "unsupported_chain" };
   }
   if (PROMPT_TEXT.test(input)) return { ok: false, code: "contains_prompt_text" };
@@ -93,6 +95,9 @@ export function validateSolanaAddress(rawInput: string): AddressValidation {
 
   return { ok: true, address: input };
 }
+
+/** Backwards-compatible name for callers outside this project. */
+export const validateSolanaAddress = validateContractAddress;
 
 function looksBase58Address(s: string): boolean {
   if (s.length < 32 || s.length > 44) return false;
@@ -106,12 +111,12 @@ export function normalizeAddress(address: string): string {
 }
 
 export const ADDRESS_MESSAGES: Record<AddressRejection, string> = {
-  empty: "Paste a Solana token contract address to begin.",
-  too_long: "That input is too long. A Solana address is 32-44 characters.",
+  empty: "Paste a Solana or Robinhood Chain contract address to begin.",
+  too_long: "That input is too long to be a supported contract address.",
   looks_like_url: "Paste the contract address itself, not a link.",
   multiple_addresses: "One address at a time, please.",
   contains_prompt_text: "That doesn't look like a contract address.",
-  unsupported_chain: "Only Solana addresses are supported right now.",
-  invalid_base58: "That isn't a valid Solana address.",
-  invalid_length: "That isn't a valid Solana address.",
+  unsupported_chain: "Only Solana and Robinhood Chain addresses are supported right now.",
+  invalid_base58: "That isn't a valid Solana or Robinhood Chain address.",
+  invalid_length: "That isn't a valid Solana or Robinhood Chain address.",
 };

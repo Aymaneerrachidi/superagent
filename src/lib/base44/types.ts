@@ -13,7 +13,7 @@ export type Base44FailureCode =
 export type ProgressEvent = { at: number; text: string };
 
 export type Base44Request = {
-  /** Validated Solana mint. This is the entire message sent to the agent. */
+  /** Validated Solana or Robinhood Chain contract. The entire message sent to the agent. */
   mint: string;
   jobId: string;
   signal?: AbortSignal;

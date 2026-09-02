@@ -3,7 +3,7 @@
 /** Paste a contract address, watch it work, read the report. That is the app. */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Report } from "@/lib/report/schema";
-import { validateSolanaAddress, MAX_INPUT_LENGTH, ADDRESS_MESSAGES } from "@/lib/solana/address";
+import { validateContractAddress, MAX_INPUT_LENGTH, ADDRESS_MESSAGES } from "@/lib/solana/address";
 import { ReportView } from "@/components/Report";
 import { ProgressPanel, type Progress } from "@/components/Progress";
 
@@ -62,7 +62,7 @@ export function App() {
     return () => clearInterval(id);
   }, [busy]);
 
-  const check = validateSolanaAddress(address);
+  const check = validateContractAddress(address);
   const locked = access?.needsCode === true && access.unlocked === false;
   const canSubmit = check.ok && !busy && !locked && access?.enabled !== false;
 
@@ -184,8 +184,8 @@ export function App() {
               Know why it&rsquo;s moving before you chase it.
             </h1>
             <p className="mt-4 max-w-[34rem] text-[0.9375rem] leading-relaxed text-paper-2">
-              Paste a Solana contract address. Get the market move, the catalysts, the wallets and the
-              risks — each one labelled with how well it&rsquo;s actually evidenced.
+              Paste a Solana or Robinhood Chain contract address. Get the market move, the catalysts,
+              the wallets and the risks — each one labelled with how well it&rsquo;s actually evidenced.
             </p>
 
             <form
@@ -205,7 +205,7 @@ export function App() {
                       if (error) setError(null);
                     }}
                     placeholder="Contract address"
-                    aria-label="Solana contract address"
+                    aria-label="Solana or Robinhood Chain contract address"
                     autoComplete="off"
                     autoCorrect="off"
                     autoCapitalize="off"

@@ -7,7 +7,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Why Is This Pumping?",
-  description: "Paste a Solana contract address and find out why it's moving.",
+  description: "Analyze a Solana or Robinhood Chain contract address and find out why it's moving.",
 };
 
 export const viewport: Viewport = {

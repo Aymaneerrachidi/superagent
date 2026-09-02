@@ -1,6 +1,6 @@
 # Why Is This Pumping?
 
-Paste a Solana contract address, get an evidence-labelled research report on why it's moving.
+Paste a Solana or Robinhood Chain contract address, get an evidence-labelled research report on why it's moving.
 
 A small personal project: one page, one input, one report. Next.js 16 + TypeScript, no database.
 
@@ -192,8 +192,9 @@ Kept deliberately, because they're cheap and the alternative is worse:
 
 - The Base44 key is server-side only. There is no `NEXT_PUBLIC_` variable carrying it,
   and secrets are redacted from every log line and error path.
-- Addresses are validated as real Base58/32-byte Solana keys before anything runs.
-  URLs, prompt text and other chains are rejected.
+- Addresses are validated as either real Base58/32-byte Solana keys or standard
+  20-byte EVM contracts used by Robinhood Chain. URLs, prompt text and other
+  address formats are rejected.
 - Report output is treated as hostile input. Scripts, event handlers, `javascript:`
   and `data:` URLs cannot render.
 - The access cookie stores an HMAC, not your passphrase. Rotating `ACCESS_CODE`

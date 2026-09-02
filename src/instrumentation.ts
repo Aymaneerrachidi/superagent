@@ -15,9 +15,11 @@ export async function register() {
   }
 
   // Printed on every boot so it is obvious which build is actually running.
+  // `matching=identity` is the marker for the fix to the capped-conversation
+  // bug: an older build prints nothing here and will never find a reply.
   const { base44Configured } = await import("@/lib/env");
   console.log(
-    `[config] adapter=${base44Configured() ? "live" : "mock"} ` +
+    `[config] build=identity-matching adapter=${base44Configured() ? "live" : "mock"} ` +
       `timeout=${env.base44TimeoutMs > 0 ? Math.round(env.base44TimeoutMs / 1000) + "s" : "none"} ` +
       `cooldown=${env.cooldownSeconds}s cache=${env.cacheTtlSeconds}s`,
   );

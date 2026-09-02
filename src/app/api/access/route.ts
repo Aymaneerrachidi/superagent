@@ -20,6 +20,9 @@ export async function GET(req: Request) {
       // Shown in the UI so mock data is never mistaken for real research.
       mode: base44Mode(),
       enabled: env.analysisEnabled,
+      // Bumped when poller behaviour changes, so a stale build is visible
+      // from the browser rather than only from the server log.
+      build: "identity-matching",
     },
     { headers: { "cache-control": "no-store" } },
   );

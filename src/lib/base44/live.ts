@@ -141,8 +141,8 @@ function repliesAfterAnchor(conversation: unknown, anchorId: string | null, base
 /**
  * Builds a readable report out of the agent's narration.
  *
- * Used when the deadline arrives before a structured report: what the agent
- * actually established beats nothing, provided it is clearly marked partial.
+ * Used only when a run is cut short -- a configured deadline, or a cancel.
+ * What the agent established beats nothing, provided it is marked partial.
  */
 function partialReportFrom(progress: string[], mint: string) {
   const parsed = reportSchema.safeParse({
@@ -210,7 +210,8 @@ export class LiveBase44Adapter implements Base44Adapter {
 
     try {
       // 1. The conversation. The API returns the existing one for this key.
-      const created = await call("POST", "/conversations", undefined, controller.signal);
+      // The body is required: this endpoint 422s on an empty POST.
+      const created = await call("POST", "/conversations", { metadata: { job_id: req.jobId } }, controller.signal);
       if (!created.ok) {
         log.warn("base44_http_error", { step: "conversation", status: created.status, body: created.text });
         if (created.status === 401 || created.status === 403) {
@@ -294,7 +295,7 @@ export class LiveBase44Adapter implements Base44Adapter {
         }
       }
 
-      // 5. Deadline reached. Return what the agent did establish.
+      // 5. Only reached when a deadline was configured. Salvage what exists.
       const partial = salvage();
       if (partial) {
         log.warn("base44_partial", { jobId: req.jobId, progressEvents: progress.length, polls: timings.polls });

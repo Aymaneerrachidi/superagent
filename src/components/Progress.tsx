@@ -104,8 +104,8 @@ export function ProgressPanel({
       </ol>
 
       <p className="border-t border-line px-5 py-3 text-[0.7rem] text-paper-3">
-        This keeps running if you switch tabs. If it takes too long, you get whatever the agent
-        established so far rather than nothing.
+        This keeps running if you switch tabs. There is no time limit — it waits until the
+        agent is done.
       </p>
     </div>
   );

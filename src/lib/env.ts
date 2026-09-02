@@ -99,11 +99,14 @@ export const env = {
     return int("CACHE_TTL_SECONDS", 300);
   },
   /**
-   * When to stop waiting and show whatever the agent established. Not a
-   * failure: the partial output is rendered and labelled as such.
+   * Optional. Seconds after which to stop waiting and render whatever the
+   * agent established so far, labelled partial.
+   *
+   * 0 (the default) means no deadline: wait for the real report. The salvage
+   * path still runs when a request is cancelled, so nothing is thrown away.
    */
   get partialAfterSeconds() {
-    return int("PARTIAL_AFTER_SECONDS", 480);
+    return int("PARTIAL_AFTER_SECONDS", 0);
   },
 } as const;
 

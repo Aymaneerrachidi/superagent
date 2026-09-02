@@ -42,7 +42,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 | `COOLDOWN_SECONDS` | `20` | Minimum gap between analyses. |
 | `MAX_ANALYSES_PER_DAY` | `50` | Hard daily ceiling on upstream calls. |
 | `CACHE_TTL_SECONDS` | `300` | Reuse a report for the same address for this long. |
-| `PARTIAL_AFTER_SECONDS` | `480` | Stop waiting and show what the agent had. Not a failure. |
+| `PARTIAL_AFTER_SECONDS` | `0` | Optional deadline. `0` means none: wait for the real report. |
 | `BASE44_TIMEOUT_MS` | `0` | Wait budget in ms. `0` means no limit: wait until the agent answers. |
 | `BASE44_MAX_RETRIES` | `2` | Retries for transient failures only. |
 | `BASE44_FORCE_MOCK` | `false` | Force sample data even with credentials set. |
@@ -95,9 +95,10 @@ Those narration lines are streamed to the browser and shown live, so you watch
 the agent think instead of staring at a spinner. The run ends when a message
 parses into a report; unparseable messages mean it is still working.
 
-**A full run takes about 4-5 minutes.** At `PARTIAL_AFTER_SECONDS` (default 8
-minutes) the app stops waiting and renders whatever the agent established,
-clearly labelled partial. Partial reports are never cached.
+**A full run takes about 4-5 minutes.** There is no deadline: the app waits for
+the real report. Setting `PARTIAL_AFTER_SECONDS` adds one, after which whatever
+the agent established is rendered and labelled partial. Partial reports are
+never cached.
 
 ### Latency instrumentation
 

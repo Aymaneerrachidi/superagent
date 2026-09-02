@@ -192,8 +192,8 @@ function stageForProgress(count: number): StageKey {
 
 async function run(job: Job): Promise<void> {
   const controller = new AbortController();
-  // Stop waiting at the partial deadline and show what the agent established,
-  // rather than discarding a run that may be nearly done.
+  // No deadline by default. If PARTIAL_AFTER_SECONDS is set, the run stops
+  // there and renders what the agent established rather than nothing.
   const partialAt =
     env.partialAfterSeconds > 0
       ? setTimeout(() => controller.abort(), env.partialAfterSeconds * 1000)
@@ -233,7 +233,11 @@ async function run(job: Job): Promise<void> {
         waitedSeconds: waited,
       });
       job.status = "error";
-      job.errorCode = `${result.code}:${waited}s`;
+      // Status first, then elapsed: together they say which call failed and
+      // whether it failed instantly or after real work.
+      job.errorCode = result.httpStatus
+        ? `${result.code}:${result.httpStatus}:${waited}s`
+        : `${result.code}:${waited}s`;
       job.error =
         result.code === "timeout"
           ? `Research ran ${Math.floor(waited / 60)}m ${waited % 60}s without finishing. Try again.`

@@ -5,8 +5,9 @@ import { validateContractAddress, decodeBase58, MAX_INPUT_LENGTH } from "@/lib/s
 /** A real pump.fun mint, and a real wallet address. */
 const VALID_MINT = "EEpng77ZPn9FbgbT4xsRjwuxNCcMBYq3HTwEscyTpump";
 const WALLET_ADDRESS = "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM";
-/** Canonical WETH contract from the Robinhood Chain documentation. */
 const ROBINHOOD_CONTRACT = "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73";
+const BASE_CONTRACT = "0x4200000000000000000000000000000000000006";
+const BNB_CONTRACT = "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c";
 
 describe("contract address validation", () => {
   it("accepts a valid Solana CA", () => {
@@ -71,12 +72,15 @@ describe("contract address validation", () => {
     }
   });
 
-  it("accepts a Robinhood Chain EVM contract", () => {
-    expect(validateContractAddress(ROBINHOOD_CONTRACT)).toEqual({
+  it.each([
+    ["Base", BASE_CONTRACT],
+    ["BNB Chain", BNB_CONTRACT],
+    ["Robinhood Chain", ROBINHOOD_CONTRACT],
+  ])("accepts a %s EVM contract", (_chain, contract) => {
+    expect(validateContractAddress(contract)).toEqual({
       ok: true,
-      address: ROBINHOOD_CONTRACT,
+      address: contract,
     });
-    expect(validateContractAddress("0x" + "a".repeat(40)).ok).toBe(true);
   });
 
   it("rejects malformed EVM contracts", () => {

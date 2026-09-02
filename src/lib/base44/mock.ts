@@ -27,14 +27,20 @@ function seeded(mint: string) {
 
 function payload(mint: string) {
   const rnd = seeded(mint);
-  const symbol = mint.slice(0, 4).toUpperCase();
+  const isEvm = /^0x[0-9a-fA-F]{40}$/.test(mint);
+  const symbol = (isEvm ? mint.slice(2, 6) : mint.slice(0, 4)).toUpperCase();
   const change24 = Math.round((rnd() * 320 - 40) * 100) / 100;
   const now = new Date();
   const iso = (minutesAgo: number) => new Date(now.getTime() - minutesAgo * 60_000).toISOString();
 
   return {
     status: "completed",
-    token: { name: `Mock Token ${symbol}`, symbol, mint, primary_pool: "PumpSwap · SOL pair" },
+    token: {
+      name: `Mock Token ${symbol}`,
+      symbol,
+      mint,
+      primary_pool: isEvm ? "EVM primary pair" : "PumpSwap · SOL pair",
+    },
     snapshot_at: now.toISOString(),
     movement: {
       classification: "24H_PUMP_WITH_SHORT_TERM_PULLBACK",
@@ -95,7 +101,9 @@ function payload(mint: string) {
     ],
     narrative: {
       categories: ["ATTENTION / MOMENTUM"],
-      origin: "FACT: the token launched on pump.fun with no product claim attached to it.",
+      origin: isEvm
+        ? "FACT: the token is deployed as a contract on a supported EVM network."
+        : "FACT: the token launched on pump.fun with no product claim attached to it.",
       lore:
         "INFERENCE: the story is momentum itself. Mentions cluster among a small set of accounts " +
         "that post together rather than spreading organically.",
@@ -129,7 +137,7 @@ function payload(mint: string) {
     ],
     creator_activity: {
       status: "PARTIAL",
-      pump_fun_creator: `${mint.slice(0, 6)}CreatorMock${mint.slice(-4)}`,
+      [isEvm ? "deployer" : "pump_fun_creator"]: `${mint.slice(0, 6)}CreatorMock${mint.slice(-4)}`,
       note: "The deployer still holds a position and has not sold in the observed window.",
       label: "INFERENCE",
     },
@@ -167,13 +175,20 @@ function payload(mint: string) {
       `INFERENCE: the move in ${symbol} is attention-driven, not news-driven. The strongest evidence ` +
       `points to a social post preceding the largest volume candle, on one small pool with concentrated ` +
       `holders. Nothing here establishes a reason for the price to hold once attention moves on.`,
-    sources: [
-      { id: "s1", title: "Social post referencing the ticker", url: "https://x.com/example_trader/status/1", publisher: "X" },
-      { id: "s2", title: "Mention volume time series", url: "https://example.com/mentions", publisher: "Social index" },
-      { id: "s3", title: "Pair and trade history", url: `https://dexscreener.com/solana/${mint}`, publisher: "DEX Screener" },
-      { id: "s4", title: "Holder distribution and transfers", url: `https://solscan.io/token/${mint}`, publisher: "Solscan" },
-      { id: "s5", title: "Mint account state", url: `https://solscan.io/account/${mint}`, publisher: "Solscan" },
-    ],
+    sources: isEvm
+      ? [
+          { id: "s1", title: "Social post referencing the ticker", url: "https://x.com/example_trader/status/1", publisher: "X" },
+          { id: "s2", title: "Mention volume time series", url: "https://example.com/mentions", publisher: "Social index" },
+          { id: "s3", title: "Pair and trade history", url: `https://dexscreener.com/search?q=${mint}`, publisher: "DEX Screener" },
+          { id: "s4", title: "Holder distribution and transfers", url: `https://blockscan.com/address/${mint}`, publisher: "Blockscan" },
+        ]
+      : [
+          { id: "s1", title: "Social post referencing the ticker", url: "https://x.com/example_trader/status/1", publisher: "X" },
+          { id: "s2", title: "Mention volume time series", url: "https://example.com/mentions", publisher: "Social index" },
+          { id: "s3", title: "Pair and trade history", url: `https://dexscreener.com/solana/${mint}`, publisher: "DEX Screener" },
+          { id: "s4", title: "Holder distribution and transfers", url: `https://solscan.io/token/${mint}`, publisher: "Solscan" },
+          { id: "s5", title: "Mint account state", url: `https://solscan.io/account/${mint}`, publisher: "Solscan" },
+        ],
     limitations: ["Intent behind clustered buying could not be established."],
     partial: false,
   };

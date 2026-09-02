@@ -1,10 +1,10 @@
 /**
- * Contract address validation for Solana and Robinhood Chain.
+ * Contract address validation for Solana and supported EVM networks.
  *
  * Strict, allow-list based: the input must be either one 32-byte Solana Base58
- * address or one standard 20-byte EVM address used by Robinhood Chain. URLs,
- * prompt text, multiple addresses and other formats are rejected before
- * anything expensive happens.
+ * address or one standard 20-byte address used by Base, BNB Chain and
+ * Robinhood Chain. URLs, prompt text, multiple addresses and other formats are
+ * rejected before anything expensive happens.
  */
 
 const BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -50,7 +50,7 @@ export function decodeBase58(input: string): Uint8Array | null {
   return Uint8Array.from(bytes.reverse());
 }
 
-/** Robinhood Chain is EVM-compatible and uses standard 20-byte hex addresses. */
+/** Base, BNB Chain and Robinhood Chain use standard 20-byte EVM addresses. */
 const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 /** Bitcoin bech32 and Tron prefixes, both of which are frequently pasted by mistake. */
 const OTHER_CHAIN = /^(bc1[0-9a-z]{20,}|T[1-9A-HJ-NP-Za-km-z]{33}|(cosmos|osmo|inj)1[0-9a-z]{20,})$/;
@@ -111,12 +111,12 @@ export function normalizeAddress(address: string): string {
 }
 
 export const ADDRESS_MESSAGES: Record<AddressRejection, string> = {
-  empty: "Paste a Solana or Robinhood Chain contract address to begin.",
+  empty: "Paste a supported contract address to begin.",
   too_long: "That input is too long to be a supported contract address.",
   looks_like_url: "Paste the contract address itself, not a link.",
   multiple_addresses: "One address at a time, please.",
   contains_prompt_text: "That doesn't look like a contract address.",
-  unsupported_chain: "Only Solana and Robinhood Chain addresses are supported right now.",
-  invalid_base58: "That isn't a valid Solana or Robinhood Chain address.",
-  invalid_length: "That isn't a valid Solana or Robinhood Chain address.",
+  unsupported_chain: "Use a Solana, Base, BNB Chain, or Robinhood Chain address.",
+  invalid_base58: "Use a valid Solana or EVM contract address.",
+  invalid_length: "Use a valid Solana or EVM contract address.",
 };

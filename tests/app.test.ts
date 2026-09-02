@@ -10,6 +10,8 @@ import { ACCESS_COOKIE, accessToken } from "@/lib/access";
 const MINT = "EEpng77ZPn9FbgbT4xsRjwuxNCcMBYq3HTwEscyTpump";
 const MINT_2 = "So11111111111111111111111111111111111111112";
 const ROBINHOOD_CONTRACT = "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73";
+const BASE_CONTRACT = "0x4200000000000000000000000000000000000006";
+const BNB_CONTRACT = "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c";
 
 /** Counts every call that reaches the adapter, so "no paid call" is provable. */
 class Counting implements Base44Adapter {
@@ -95,12 +97,16 @@ describe("analysis", () => {
     expect(body.report).toBeTruthy();
   });
 
-  it("accepts a Robinhood Chain contract", async () => {
-    const res = await analyze(post({ address: ROBINHOOD_CONTRACT }));
+  it.each([
+    ["Base", BASE_CONTRACT],
+    ["BNB Chain", BNB_CONTRACT],
+    ["Robinhood Chain", ROBINHOOD_CONTRACT],
+  ])("accepts a %s contract", async (_chain, contract) => {
+    const res = await analyze(post({ address: contract }));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { status: string; address: string; report: unknown };
     expect(body.status).toBe("done");
-    expect(body.address).toBe(ROBINHOOD_CONTRACT);
+    expect(body.address).toBe(contract);
     expect(body.report).toBeTruthy();
   });
 

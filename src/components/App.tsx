@@ -196,8 +196,8 @@ export function App() {
               See why it&rsquo;s moving.
             </h1>
             <p className="mt-4 max-w-[34rem] text-[0.9375rem] leading-relaxed text-paper-2">
-              Paste a Solana or Robinhood Chain contract. Get market cap, catalysts, wallet activity,
-              risks, and sources.
+              Paste a Solana, Base, BNB Chain, or Robinhood Chain contract. Get market cap,
+              catalysts, wallet activity, risks, and sources.
             </p>
 
             <form
@@ -217,7 +217,7 @@ export function App() {
                       if (error) setError(null);
                     }}
                     placeholder="Contract address"
-                    aria-label="Solana or Robinhood Chain contract address"
+                    aria-label="Solana, Base, BNB Chain, or Robinhood Chain contract address"
                     autoComplete="off"
                     autoCorrect="off"
                     autoCapitalize="off"

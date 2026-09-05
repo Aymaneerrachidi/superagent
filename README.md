@@ -19,7 +19,7 @@ sample data, so the whole app works immediately.
 
 ## Environment
 
-Five variables, all optional:
+Core variables:
 
 | Variable | Default | What it does |
 | --- | --- | --- |
@@ -28,6 +28,17 @@ Five variables, all optional:
 | `BASE44_SUPERAGENT_BASE_URL` | *(blank)* | Your Superagent endpoint. |
 | `BASE44_SUPERAGENT_API_KEY` | *(blank)* | Your API key. Server-side only. |
 | `ANALYSIS_ENABLED` | `true` | Set `false` to stop all analyses instantly. |
+
+Early Runner Radar uses a separate agent:
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `BASE44_AGENT_API_BASE` | Radar agent URL | Base URL from the Radar agent Developer panel. |
+| `BASE44_AGENT_ID` | `6a9c66e330a23e2f907a2242` | Early Runner Radar agent ID. |
+| `BASE44_AGENT_API_KEY` | *(blank)* | Radar API key. Server-side only. |
+| `BASE44_AGENT_CONVERSATION_ID` | *(blank)* | Optional fixed conversation for deployments that need one. |
+| `RADAR_TIMEOUT_MS` | `240000` | Maximum wait for a Radar response. |
+| `RADAR_FORCE_FIXTURE` | `false` | Show labelled sample Radar data locally. |
 
 Generate a session secret:
 
@@ -146,6 +157,24 @@ browser  ->  /api/analyze  ->  spend guard  ->  Base44 adapter  ->  Superagent
   characters, and rendered as React elements — never as an HTML string. Only `http(s)`
   links survive.
 
+### Early Runner Radar
+
+The second navigation tab uses two server-only routes:
+
+- `GET /api/radar/feed` requests strict structured results and caches a validated feed for up to five minutes.
+- `POST /api/radar/chat` sends a bounded text message to the Radar conversation.
+
+The browser never receives the Base44 key or calls Base44 directly. A signed,
+HttpOnly `witp_radar` cookie associates the Base44 conversation ID with the
+browser session; tampered cookies are rejected. An optional
+`BASE44_AGENT_CONVERSATION_ID` supports deployments that use one fixed
+conversation.
+
+Feed records are validated with Zod and isolated by `chain_id + contract_address`.
+Stale, missing-safety, and conflicting responses cannot enter the verified list.
+Robinhood candidates without sellability verification remain visible under
+Quarantined / unverified with the exact reason.
+
 ## Commands
 
 ```bash
@@ -162,6 +191,10 @@ npm run verify     # typecheck + test + build
 Works on Vercel with no configuration. Push, import the repo, add whichever
 environment variables you want, deploy.
 
+For live Radar data, add `BASE44_AGENT_API_BASE`, `BASE44_AGENT_ID`, and
+`BASE44_AGENT_API_KEY` to the Vercel project, then redeploy. Never prefix these
+variables with `NEXT_PUBLIC_`.
+
 Two notes for a serverless deployment:
 
 - The request stays open until research completes, avoiding per-instance polling
@@ -176,7 +209,8 @@ Two notes for a serverless deployment:
 **Stop all analyses:** set `ANALYSIS_ENABLED=false` and redeploy. Refused before any
 upstream call.
 
-**Rotate the API key:** replace `BASE44_SUPERAGENT_API_KEY` and redeploy. No code change.
+**Rotate an API key:** replace `BASE44_SUPERAGENT_API_KEY` or
+`BASE44_AGENT_API_KEY` and redeploy. No code change.
 
 **Diagnose a failure:** the UI shows a safe failure code (`auth_failed`, `timeout`,
 `malformed_response`, …). The real reason, with secrets redacted, is one line in the

@@ -83,6 +83,26 @@ export const env = {
     return bool("BASE44_FORCE_MOCK", false);
   },
 
+  // ---- Early Runner Radar (server-only) ----
+  get radarBaseUrl() {
+    return str("BASE44_AGENT_API_BASE");
+  },
+  get radarApiKey() {
+    return str("BASE44_AGENT_API_KEY");
+  },
+  get radarAgentId() {
+    return str("BASE44_AGENT_ID", "6a9c66e330a23e2f907a2242");
+  },
+  get radarConversationId() {
+    return str("BASE44_AGENT_CONVERSATION_ID");
+  },
+  get radarTimeoutMs() {
+    return int("RADAR_TIMEOUT_MS", 240_000);
+  },
+  get radarForceFixture() {
+    return bool("RADAR_FORCE_FIXTURE", false);
+  },
+
   // ---- Spend guard ----
   /** Kill switch. Refuses new analyses before any upstream call. */
   get analysisEnabled() {
@@ -115,6 +135,10 @@ export function base44Configured(): boolean {
   return !env.base44ForceMock && env.base44BaseUrl.length > 0 && env.base44ApiKey.length > 0;
 }
 
+export function radarConfigured(): boolean {
+  return !env.radarForceFixture && env.radarBaseUrl.length > 0 && env.radarApiKey.length > 0;
+}
+
 /**
  * Misconfiguration that must stop a production deploy.
  *
@@ -130,6 +154,13 @@ export function configProblems(): string[] {
     if (env.sessionSecret.length < 32) {
       problems.push("SESSION_SECRET must be at least 32 characters when ACCESS_CODE is set");
     }
+  }
+  const radarParts = [env.radarBaseUrl, env.radarApiKey];
+  if (radarParts.some(Boolean) && !radarParts.every(Boolean)) {
+    problems.push("BASE44_AGENT_API_BASE and BASE44_AGENT_API_KEY must be set together");
+  }
+  if (env.radarBaseUrl && !env.radarBaseUrl.startsWith("https://")) {
+    problems.push("BASE44_AGENT_API_BASE must use https");
   }
   return problems;
 }

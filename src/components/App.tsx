@@ -6,6 +6,7 @@ import type { Report } from "@/lib/report/schema";
 import { validateContractAddress, MAX_INPUT_LENGTH, ADDRESS_MESSAGES } from "@/lib/solana/address";
 import { ReportView } from "@/components/Report";
 import { ProgressPanel, type Progress } from "@/components/Progress";
+import { RadarDashboard } from "@/components/RadarDashboard";
 
 const EXAMPLE = "EEpng77ZPn9FbgbT4xsRjwuxNCcMBYq3HTwEscyTpump";
 const cx = (...p: (string | false | null | undefined)[]) => p.filter(Boolean).join(" ");
@@ -27,6 +28,7 @@ type Job = {
 };
 
 export function App() {
+  const [view, setView] = useState<"research" | "radar">("research");
   const [access, setAccess] = useState<Access | null>(null);
   const [code, setCode] = useState("");
   const [codeError, setCodeError] = useState<string | null>(null);
@@ -141,10 +143,10 @@ export function App() {
 
   // With nothing to show yet, the input is the whole page, so it sits centred
   // rather than stranded under a band of empty space.
-  const idle = !job && !busy;
+  const idle = view === "research" && !job && !busy;
 
   return (
-    <main className="relative mx-auto flex min-h-dvh w-full max-w-[46rem] flex-col px-5 sm:px-6">
+    <main className={cx("relative mx-auto flex min-h-dvh w-full flex-col px-5 sm:px-6", view === "radar" && !locked ? "max-w-[78rem]" : "max-w-[46rem]")}>
       <div className="bloom" aria-hidden="true" />
 
       <div className={cx("relative flex flex-1 flex-col pb-16", idle && "justify-center")}>
@@ -153,14 +155,13 @@ export function App() {
           <span className="font-display text-[1.0625rem] tracking-[-0.01em] text-paper">
             Why Is This Pumping?
           </span>
-          {access?.mode === "mock" && (
-            <span
-              className="rounded bg-fact/10 px-2 py-1 font-mono text-[0.5625rem] tracking-[0.1em] text-fact uppercase"
-              title="No Base44 credentials are set, so this is realistic sample data"
-            >
-              Sample data
-            </span>
-          )}
+          {!locked && <div className="flex items-center gap-2">
+            <nav className="flex items-center gap-1 rounded-xl border border-line bg-ink-2 p-1" aria-label="Agents">
+              <button type="button" onClick={() => setView("research")} aria-current={view === "research" ? "page" : undefined} className={cx("min-h-9 rounded-lg px-3 text-[0.7rem] transition-colors", view === "research" ? "bg-paper text-ink" : "text-paper-2 hover:text-paper")}>Token research</button>
+              <button type="button" onClick={() => setView("radar")} aria-current={view === "radar" ? "page" : undefined} className={cx("min-h-9 rounded-lg px-3 text-[0.7rem] transition-colors", view === "radar" ? "bg-paper text-ink" : "text-paper-2 hover:text-paper")}>Runner radar</button>
+            </nav>
+            {view === "research" && access?.mode === "mock" && <span className="hidden rounded bg-fact/10 px-2 py-1 font-mono text-[0.5625rem] tracking-[0.1em] text-fact uppercase sm:block">Sample</span>}
+          </div>}
         </header>
 
         {/* ---- Passphrase, only when one is configured ---- */}
@@ -189,6 +190,8 @@ export function App() {
             </div>
             {codeError && <p className="mt-3 text-[0.8125rem] text-alert">{codeError}</p>}
           </section>
+        ) : view === "radar" ? (
+          <RadarDashboard />
         ) : (
           <>
             {/* ---- The one thing this page does ---- */}
@@ -283,7 +286,7 @@ export function App() {
         )}
 
         {/* ---- Progress: the agent thinking out loud ---- */}
-        {busy && (!job || job.status === "running") && (
+        {view === "research" && busy && (!job || job.status === "running") && (
           <div className="mt-10">
             <ProgressPanel
               progress={job?.progress ?? []}
@@ -295,7 +298,7 @@ export function App() {
         )}
 
         {/* ---- Report ---- */}
-        {job?.status === "done" && job.report && (
+        {view === "research" && job?.status === "done" && job.report && (
           <div className="rise mt-10">
             {job.partial && (
               <p className="mb-4 rounded-xl border border-fact/30 bg-fact/[0.07] px-4 py-3 text-[0.8125rem] text-fact">

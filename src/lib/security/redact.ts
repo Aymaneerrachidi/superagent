@@ -13,7 +13,10 @@ const PATTERNS: RegExp[] = [
 ];
 
 function secretValues(): string[] {
-  return [env.base44ApiKey, env.sessionSecret, env.accessCode, env.base44BaseUrl, env.base44AgentId].filter(
+  return [
+    env.base44ApiKey, env.radarApiKey, env.sessionSecret, env.accessCode,
+    env.base44BaseUrl, env.base44AgentId, env.radarBaseUrl, env.radarAgentId,
+  ].filter(
     (v) => typeof v === "string" && v.length >= 8,
   );
 }

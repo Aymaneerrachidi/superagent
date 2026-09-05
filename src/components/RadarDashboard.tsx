@@ -30,14 +30,14 @@ export function RunnerCard({ runner, quarantined }: { runner: Runner; quarantine
           <p className="mt-1 text-sm text-paper-2"><SafeText>{runner.name}</SafeText></p>
         </div>
         <div className="text-right">
-          <div className="tnum text-xl text-paper">{Math.round(runner.score)}</div>
+          <div className="tnum text-xl text-paper">{runner.score === null ? "—" : Math.round(runner.score)}</div>
           <div className="eyebrow">score</div>
         </div>
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-x-5 gap-y-3 border-y border-line py-4 sm:grid-cols-4 lg:grid-cols-7">
         {[
-          ["State", runner.state], ["Confidence", `${Math.round(runner.confidence * 100)}%`],
+          ["State", runner.state], ["Confidence", runner.confidence === null ? "—" : `${Math.round(runner.confidence * 100)}%`],
           ["Liquidity", money(runner.liquidity_usd)], ["Market cap", money(runner.market_cap_usd)],
           ["Volume 5m", money(runner.volume_5m)], ["5m", pct(runner.price_change_5m_pct)], ["15m", pct(runner.price_change_15m_pct)],
         ].map(([label, value]) => <div key={label}><div className="eyebrow">{label}</div><div className="tnum mt-1 text-[0.78rem] text-paper"><SafeText>{String(value)}</SafeText></div></div>)}

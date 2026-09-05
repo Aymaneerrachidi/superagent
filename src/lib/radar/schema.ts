@@ -23,8 +23,8 @@ export const runnerSchema = z.object({
   name: boundedText(120),
   symbol: boundedText(40),
   state: boundedText(80),
-  score: z.number().finite().min(0).max(100),
-  confidence: z.number().finite().min(0).max(1),
+  score: z.number().finite().min(0).max(100).nullable(),
+  confidence: z.number().finite().min(0).max(1).nullable(),
   liquidity_usd: amount,
   market_cap_usd: amount,
   volume_5m: amount,
@@ -59,6 +59,7 @@ export const radarFeedSchema = z.object({
       if (seen.has(key)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [bucket, index], message: "Duplicate chain and contract" });
       seen.add(key);
       if (bucket === "verified_runners") {
+        if (runner.score === null || runner.confidence === null) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [bucket, index], message: "Verified runners require score and confidence" });
         if (runner.safety_status !== "verified") ctx.addIssue({ code: z.ZodIssueCode.custom, path: [bucket, index, "safety_status"], message: "Verified runners require verified safety" });
         if (runner.data_freshness === "stale" || runner.data_freshness === "unknown") ctx.addIssue({ code: z.ZodIssueCode.custom, path: [bucket, index, "data_freshness"], message: "Stale data cannot be verified" });
         if (runner.evidence_links.length === 0) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [bucket, index, "evidence_links"], message: "Verified runners require evidence" });

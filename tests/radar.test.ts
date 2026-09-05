@@ -36,6 +36,15 @@ describe("Early Runner Radar", () => {
     const runner = feed.verified_runners[0]!;
     expect(radarFeedSchema.safeParse({ ...feed, verified_runners: [{ ...runner, data_freshness: "stale" }] }).success).toBe(false);
     expect(radarFeedSchema.safeParse({ ...feed, verified_runners: [{ ...runner, safety_status: "unknown" }] }).success).toBe(false);
+    expect(radarFeedSchema.safeParse({ ...feed, verified_runners: [{ ...runner, score: null }] }).success).toBe(false);
+  });
+
+  it("keeps unavailable scores explicit for quarantined candidates", () => {
+    const feed = radarFixture();
+    const candidate = { ...feed.quarantined_candidates[0]!, score: null, confidence: null };
+    expect(radarFeedSchema.safeParse({ ...feed, quarantined_candidates: [candidate] }).success).toBe(true);
+    const html = renderToStaticMarkup(createElement(RunnerCard, { runner: candidate, quarantined: true }));
+    expect(html).toContain("—");
   });
 
   it("keeps Robinhood candidates visible with the exact quarantine reason and evidence", () => {
